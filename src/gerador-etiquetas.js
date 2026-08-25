@@ -20,12 +20,10 @@ function buscarSelectModelo(scanner){
 }
 
 function codigoPeca(i){
-  const d=new Date();
-  const y=String(d.getFullYear()).slice(-2);
-  const m=String(d.getMonth()+1).padStart(2,'0');
-  const dia=String(d.getDate()).padStart(2,'0');
-  const base=Date.now().toString(36).toUpperCase();
-  return `PEC-${y}${m}${dia}-${base}-${String(i).padStart(3,'0')}`;
+  // Código curto para deixar as barras do CODE128 mais largas e fáceis de ler pela câmera do celular.
+  // O timestamp em base36 + sequência mantém o código único e reduz bastante a densidade da etiqueta.
+  const base=Date.now().toString(36).toUpperCase().slice(-7);
+  return `P${base}${String(i).padStart(3,'0')}`;
 }
 
 function carregarJsBarcode(){
@@ -44,7 +42,7 @@ async function imprimirEtiquetas(lista,modelo){
   const w=window.open('','_blank','width=900,height=700');
   if(!w)return;
   const itens=lista.map((c,i)=>`<div class="et"><div class="modelo">${modelo}</div><svg id="b${i}"></svg><div class="cod">${c}</div></div>`).join('');
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas ${modelo}</title><style>@page{margin:8mm}body{font-family:Arial;margin:0}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6mm}.et{border:1px solid #ddd;border-radius:8px;padding:6mm;text-align:center;break-inside:avoid}.modelo{font-size:12px;font-weight:700;margin-bottom:3mm}.cod{font-size:11px;font-family:monospace;margin-top:2mm}svg{width:100%;height:58px}</style></head><body><div class="grid">${itens}</div><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script><script>const codigos=${JSON.stringify(lista)};codigos.forEach((c,i)=>JsBarcode('#b'+i,c,{format:'CODE128',displayValue:false,height:52,margin:0}));setTimeout(()=>window.print(),600);<\/script></body></html>`);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas ${modelo}</title><style>@page{margin:8mm}body{font-family:Arial;margin:0}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6mm}.et{border:1px solid #ddd;border-radius:8px;padding:6mm;text-align:center;break-inside:avoid;min-width:0}.modelo{font-size:14px;font-weight:700;margin-bottom:3mm}.cod{font-size:13px;font-family:monospace;font-weight:700;letter-spacing:.4px;margin-top:2mm}svg{display:block;max-width:100%;height:72px;margin:0 auto}</style></head><body><div class="grid">${itens}</div><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script><script>const codigos=${JSON.stringify(lista)};codigos.forEach((c,i)=>JsBarcode('#b'+i,c,{format:'CODE128',displayValue:false,height:64,width:2.4,margin:14,background:'#ffffff',lineColor:'#000000'}));setTimeout(()=>window.print(),700);<\/script></body></html>`);
   w.document.close();
 }
 
@@ -63,7 +61,7 @@ async function abrirGerador(scanner){
   Object.assign(modal.style,{position:'fixed',inset:'0',background:'rgba(15,23,42,.72)',zIndex:'99999',display:'flex',alignItems:'center',justifyContent:'center',padding:'18px'});
   const card=document.createElement('div');
   Object.assign(card.style,{background:'#fff',borderRadius:'18px',padding:'22px',width:'min(94vw,520px)',boxShadow:'0 20px 60px rgba(0,0,0,.25)'});
-  card.innerHTML=`<h2 style="margin:0 0 6px">Gerar etiquetas de produção</h2><p style="margin:0 0 18px;color:#64748b">Cada peça receberá um código único que acompanhará o espelho até a embalagem.</p><label style="display:block;font-weight:700;margin-bottom:12px">Modelo<select class="lgModelo" style="width:100%;margin-top:6px;padding:11px;border:1px solid #cbd5e1;border-radius:10px"></select></label><label style="display:block;font-weight:700;margin-bottom:16px">Quantidade<input class="lgQtd" type="number" min="1" max="300" value="10" style="width:100%;margin-top:6px;padding:11px;border:1px solid #cbd5e1;border-radius:10px"></label><div class="lgMsg" style="min-height:20px;color:#475569;margin-bottom:12px"></div><div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="lgCancelar" type="button" style="padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700">Cancelar</button><button class="lgGerar" type="button" style="padding:10px 14px;border-radius:10px;border:0;background:#0f172a;color:#fff;font-weight:800">Gerar e imprimir</button></div>`;
+  card.innerHTML=`<h2 style="margin:0 0 6px">Gerar etiquetas de produção</h2><p style="margin:0 0 18px;color:#64748b">Cada peça receberá um código único, curto e otimizado para leitura pela câmera do celular.</p><label style="display:block;font-weight:700;margin-bottom:12px">Modelo<select class="lgModelo" style="width:100%;margin-top:6px;padding:11px;border:1px solid #cbd5e1;border-radius:10px"></select></label><label style="display:block;font-weight:700;margin-bottom:16px">Quantidade<input class="lgQtd" type="number" min="1" max="300" value="10" style="width:100%;margin-top:6px;padding:11px;border:1px solid #cbd5e1;border-radius:10px"></label><div class="lgMsg" style="min-height:20px;color:#475569;margin-bottom:12px"></div><div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button class="lgCancelar" type="button" style="padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700">Cancelar</button><button class="lgGerar" type="button" style="padding:10px 14px;border-radius:10px;border:0;background:#0f172a;color:#fff;font-weight:800">Gerar e imprimir</button></div>`;
   modal.appendChild(card);document.body.appendChild(modal);
   const sel=card.querySelector('.lgModelo');
   const opcoes=listaModelos.length?listaModelos:[modeloPadrao].filter(Boolean);
