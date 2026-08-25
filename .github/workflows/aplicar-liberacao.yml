@@ -1,0 +1,32 @@
+name: Aplicar liberacao de funcionarios
+
+on:
+  push:
+    paths:
+      - 'scripts/patch-liberacao.py'
+      - '.github/workflows/aplicar-liberacao.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+
+      - name: Aplicar patch
+        run: python scripts/patch-liberacao.py
+
+      - name: Publicar alteracao
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.jsx
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteracao necessaria"
+          else
+            git commit -m "Adiciona liberacao de acesso de funcionarios"
+            git push
+          fi
