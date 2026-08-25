@@ -19,53 +19,62 @@ where usuario_id = (
   select id from auth.users order by created_at asc limit 1
 );
 
--- Permite que todos os autenticados leiam perfis para ranking.
+create or replace function public.usuario_e_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.perfis
+    where usuario_id = auth.uid() and papel = 'admin' and ativo = true
+  );
+$$;
+
+grant execute on function public.usuario_e_admin() to authenticated;
+
+-- Todos os autenticados podem ler perfis para ranking e identificação.
 drop policy if exists "usuarios autenticados leem perfis" on perfis;
 create policy "usuarios autenticados leem perfis"
 on perfis for select to authenticated using (true);
 
--- Usuário pode criar o próprio perfil.
+-- Usuário cria o próprio perfil; admin também pode criar perfis vinculados.
 drop policy if exists "usuario cria proprio perfil" on perfis;
 create policy "usuario cria proprio perfil"
 on perfis for insert to authenticated
-with check (auth.uid() = usuario_id);
+with check (auth.uid() = usuario_id or public.usuario_e_admin());
 
 -- Usuário atualiza o próprio perfil; admin atualiza qualquer perfil.
 drop policy if exists "usuario atualiza proprio perfil" on perfis;
 create policy "usuario atualiza proprio perfil"
 on perfis for update to authenticated
-using (
-  auth.uid() = usuario_id
-  or exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin')
-)
-with check (
-  auth.uid() = usuario_id
-  or exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin')
-);
+using (auth.uid() = usuario_id or public.usuario_e_admin())
+with check (auth.uid() = usuario_id or public.usuario_e_admin());
 
 -- Administrador gerencia pré-cadastros.
 drop policy if exists "admin le funcionarios pendentes" on funcionarios_pendentes;
 create policy "admin le funcionarios pendentes"
 on funcionarios_pendentes for select to authenticated
-using (exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin'));
+using (public.usuario_e_admin());
 
 drop policy if exists "admin cria funcionarios pendentes" on funcionarios_pendentes;
 create policy "admin cria funcionarios pendentes"
 on funcionarios_pendentes for insert to authenticated
-with check (exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin'));
+with check (public.usuario_e_admin());
 
 drop policy if exists "admin atualiza funcionarios pendentes" on funcionarios_pendentes;
 create policy "admin atualiza funcionarios pendentes"
 on funcionarios_pendentes for update to authenticated
-using (exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin'))
-with check (exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin'));
+using (public.usuario_e_admin())
+with check (public.usuario_e_admin());
 
 drop policy if exists "admin exclui funcionarios pendentes" on funcionarios_pendentes;
 create policy "admin exclui funcionarios pendentes"
 on funcionarios_pendentes for delete to authenticated
-using (exists (select 1 from perfis p where p.usuario_id = auth.uid() and p.papel = 'admin'));
+using (public.usuario_e_admin());
 
--- Qualquer usuário autenticado pode localizar apenas o pré-cadastro do próprio e-mail.
+-- O próprio usuário autenticado pode localizar seu pré-cadastro pelo e-mail.
 drop policy if exists "usuario le seu pre cadastro" on funcionarios_pendentes;
 create policy "usuario le seu pre cadastro"
 on funcionarios_pendentes for select to authenticated
