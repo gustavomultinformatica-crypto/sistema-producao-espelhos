@@ -12,6 +12,7 @@ const META_PADRAO = 200;
 const ATUALIZACAO_MS = 10000;
 let timer = null;
 let metas = Object.fromEntries(SETORES.map(s => [s.id, META_PADRAO]));
+let bipagemAberta = false;
 
 function inicioHoje(){
   const d = new Date();
@@ -37,7 +38,11 @@ function estilos(){
   .tv2Stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.tv2Box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:13px;padding:12px}.tv2Box span{display:block;font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.tv2Box strong{display:block;font-size:clamp(24px,2.3vw,40px);line-height:1.05;margin-top:4px}.tv2Box small{color:#94a3b8}.tv2Box.produzido strong{color:#2563eb}
   .tv2Track{height:14px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-top:auto}.tv2Fill{height:100%;background:#2563eb;border-radius:999px}.tv2Footer{text-align:right;color:#64748b;font-size:13px}.tv2Error{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3;border-radius:12px;padding:12px 14px}
   .metas2Card{background:#fff;border:1px solid #dfe7f1;border-radius:22px;padding:22px}.metas2Grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}.metas2Row{display:grid;grid-template-columns:48px 1fr 145px;gap:12px;align-items:center;background:#f8fafc;border:1px solid #e2e8f0;border-radius:15px;padding:14px}.metas2Num{width:44px;height:44px;border-radius:12px;background:#e8efff;color:#2563eb;display:grid;place-items:center;font-weight:900}.metas2Row b{display:block}.metas2Row small{color:#64748b}.metas2Row input{margin:0;text-align:center;font-weight:900;font-size:18px}.metas2Save{margin-top:16px;width:100%;background:#2563eb}.metas2Msg{margin-top:12px;padding:12px 14px;border-radius:12px;font-weight:700;background:#ecfdf5;color:#166534}.metas2Msg.erro{background:#fff1f2;color:#9f1239}
-  @media(max-width:1100px){.tv2Grid{grid-template-columns:repeat(2,1fr)}.metas2Grid{grid-template-columns:1fr}} @media(max-width:700px){.tv2Overlay,.metas2Overlay{padding:12px}.tv2Top,.metas2Top{align-items:flex-start;flex-direction:column}.tv2Actions,.metas2Actions{width:100%}.tv2Actions button,.metas2Actions button{flex:1}.tv2Summary,.tv2Grid{grid-template-columns:1fr}.tv2Stats{grid-template-columns:repeat(3,1fr)}.metas2Row{grid-template-columns:44px 1fr}.metas2Row input{grid-column:1/-1}}
+  .bipagem2Backdrop{position:fixed;inset:0;z-index:99997;background:rgba(15,23,42,.58);backdrop-filter:blur(2px)}
+  .panel.scanner.bipagem2Aberta{display:block!important;position:fixed!important;z-index:99998!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;width:min(720px,calc(100vw - 32px))!important;max-height:calc(100vh - 32px)!important;overflow:auto!important;margin:0!important;box-shadow:0 28px 80px rgba(15,23,42,.35)!important;border-radius:22px!important;padding-top:58px!important}
+  .bipagem2Close{position:absolute;right:16px;top:14px;width:auto!important;margin:0!important;padding:9px 14px!important;border-radius:10px!important;background:#172033!important;color:#fff!important;border:0!important;font-weight:800!important;z-index:2}
+  .appNav [data-bipagem2-button].active{background:#2563eb!important;color:#fff!important}
+  @media(max-width:1100px){.tv2Grid{grid-template-columns:repeat(2,1fr)}.metas2Grid{grid-template-columns:1fr}} @media(max-width:700px){.tv2Overlay,.metas2Overlay{padding:12px}.tv2Top,.metas2Top{align-items:flex-start;flex-direction:column}.tv2Actions,.metas2Actions{width:100%}.tv2Actions button,.metas2Actions button{flex:1}.tv2Summary,.tv2Grid{grid-template-columns:1fr}.tv2Stats{grid-template-columns:repeat(3,1fr)}.metas2Row{grid-template-columns:44px 1fr}.metas2Row input{grid-column:1/-1}.panel.scanner.bipagem2Aberta{width:calc(100vw - 20px)!important;max-height:calc(100vh - 20px)!important}}
   `;
   document.head.appendChild(s);
 }
@@ -127,11 +132,53 @@ async function abrirMetas(){
   document.body.appendChild(o);
 }
 
+function ocultarScannerPainel(){
+  if(bipagemAberta) return;
+  const scanner=document.querySelector('.panel.scanner');
+  if(scanner) scanner.style.display='none';
+}
+
+function fecharBipagem(){
+  bipagemAberta=false;
+  document.querySelector('.bipagem2Backdrop')?.remove();
+  const scanner=document.querySelector('.panel.scanner');
+  if(scanner){
+    scanner.classList.remove('bipagem2Aberta');
+    scanner.querySelector('.bipagem2Close')?.remove();
+    scanner.style.display='none';
+  }
+  document.querySelector('[data-bipagem2-button]')?.classList.remove('active');
+}
+
+function abrirBipagem(){
+  const scanner=document.querySelector('.panel.scanner');
+  if(!scanner) return;
+  bipagemAberta=true;
+  document.querySelector('.bipagem2Backdrop')?.remove();
+  const fundo=document.createElement('div');
+  fundo.className='bipagem2Backdrop';
+  fundo.onclick=fecharBipagem;
+  document.body.appendChild(fundo);
+  scanner.style.display='block';
+  scanner.classList.add('bipagem2Aberta');
+  if(!scanner.querySelector('.bipagem2Close')){
+    const fechar=document.createElement('button');
+    fechar.type='button'; fechar.className='bipagem2Close'; fechar.textContent='✕ FECHAR'; fechar.onclick=fecharBipagem;
+    scanner.prepend(fechar);
+  }
+  document.querySelector('[data-bipagem2-button]')?.classList.add('active');
+  setTimeout(()=>scanner.querySelector('input')?.focus(),100);
+}
+
 function fechar(){clearInterval(timer);timer=null;if(document.fullscreenElement)document.exitFullscreen?.().catch(()=>{});document.querySelector('.tv2Overlay')?.remove();}
 
 function instalar(){
   const nav=document.querySelector('.appNav'); if(!nav) return;
+  ocultarScannerPainel();
   const antigo=nav.querySelector('[data-tv-button]'); if(antigo) antigo.remove();
+  if(!nav.querySelector('[data-bipagem2-button]')){
+    const s=document.createElement('button'); s.type='button'; s.dataset.bipagem2Button='true'; s.innerHTML='<span aria-hidden="true">▥</span> Bipagem'; s.onclick=abrirBipagem; nav.appendChild(s);
+  }
   if(!nav.querySelector('[data-meta2-button]')){
     const m=document.createElement('button'); m.type='button'; m.dataset.meta2Button='true'; m.innerHTML='<span aria-hidden="true">🎯</span> Metas por setor'; m.onclick=abrirMetas; nav.appendChild(m);
   }
