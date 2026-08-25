@@ -1,37 +1,17 @@
-const CODIGOS_SETORES={1:'SETOR-01',2:'SETOR-02',3:'SETOR-03',4:'SETOR-04',5:'SETOR-05',6:'SETOR-06'};
-const NOMES_SETORES={1:'Corte e destaque',2:'Cola e EVA',3:'Colagem do couro',4:'Limpeza',5:'Finalização e alça',6:'Embalagem'};
-
 let cameraAtiva=false;
 let streamAtual=null;
 let detectorAtual=null;
 let frameAtual=null;
 
-function carregarJsBarcode(){
-  if(window.JsBarcode)return Promise.resolve();
-  return new Promise((resolve,reject)=>{
-    const s=document.createElement('script');
-    s.src='https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js';
-    s.onload=resolve;
-    s.onerror=reject;
-    document.head.appendChild(s);
-  });
-}
-
-function setorAtual(scanner){
-  const select=scanner.querySelector('label select');
-  return Number(select?.value||1);
-}
-
 function inputCodigo(scanner){
   const labels=[...scanner.querySelectorAll('label')];
-  const label=labels.find(l=>(l.textContent||'').toLowerCase().includes('código de barras'));
+  const label=labels.find(l=>(l.textContent||'').toLowerCase().includes('código de barras')||(l.textContent||'').toLowerCase().includes('código único'));
   return label?.querySelector('input')||scanner.querySelector('input[placeholder*="Bipe"]');
 }
 
-function selectSetor(scanner){
-  const labels=[...scanner.querySelectorAll('label')];
-  const label=labels.find(l=>(l.textContent||'').trim().startsWith('Setor'));
-  return label?.querySelector('select')||scanner.querySelector('select');
+function labelCodigo(scanner){
+  const input=inputCodigo(scanner);
+  return input?.closest('label')||null;
 }
 
 function mensagem(scanner,texto,tipo='ok'){
@@ -50,44 +30,16 @@ function mensagem(scanner,texto,tipo='ok'){
   el.style.color=tipo==='erro'?'#b42318':'#1d4ed8';
 }
 
-async function renderizarCodigo(svg,valor){
-  try{
-    await carregarJsBarcode();
-    window.JsBarcode(svg,valor,{format:'CODE128',displayValue:true,height:52,margin:4,fontSize:14});
-  }catch{
-    svg.replaceWith(document.createTextNode(valor));
-  }
-}
-
-function tratarLeitura(scanner,valor){
+function preencherCodigo(scanner,valor){
   const lido=(valor||'').trim();
   if(!lido)return;
-  const match=lido.match(/^SETOR-0?([1-6])$/i);
-  if(match){
-    const id=Number(match[1]);
-    const select=selectSetor(scanner);
-    if(select){
-      if(select.disabled && Number(select.value)!==id){
-        mensagem(scanner,`Este operador pertence ao setor ${select.value}. O código lido é do setor ${id}.`,'erro');
-        return;
-      }
-      if(!select.disabled){
-        select.value=String(id);
-        select.dispatchEvent(new Event('change',{bubbles:true}));
-      }
-    }
-    mensagem(scanner,`Setor ${id} identificado: ${NOMES_SETORES[id]}.`);
-    atualizarCartao(scanner,id);
-    return;
-  }
   const input=inputCodigo(scanner);
-  if(input){
-    const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
-    setter?.call(input,lido);
-    input.dispatchEvent(new Event('input',{bubbles:true}));
-    input.focus();
-    mensagem(scanner,'Código da peça lido pela câmera. Confira e registre a peça.');
-  }
+  if(!input)return;
+  const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+  setter?.call(input,lido);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  input.focus();
+  mensagem(scanner,`Peça ${lido} lida com sucesso. Agora registre a peça.`);
 }
 
 function pararCamera(){
@@ -107,7 +59,7 @@ async function abrirCamera(scanner){
     return;
   }
   if(!('BarcodeDetector' in window)){
-    mensagem(scanner,'A leitura automática pela câmera não é suportada neste navegador. No celular, tente Chrome/Edge atualizado ou use um leitor Bluetooth.','erro');
+    mensagem(scanner,'A leitura automática pela câmera não é suportada neste navegador. Tente Chrome/Edge atualizado ou use leitor Bluetooth/USB.','erro');
     return;
   }
   try{
@@ -123,9 +75,10 @@ async function abrirCamera(scanner){
     video.autoplay=true;
     Object.assign(video.style,{width:'min(94vw,520px)',borderRadius:'18px',background:'#000'});
     const texto=document.createElement('div');
-    texto.textContent='Aponte para o código de barras';
+    texto.textContent='Aponte a câmera para o código único da peça';
     Object.assign(texto.style,{color:'#fff',fontWeight:'700',margin:'14px 0'});
     const fechar=document.createElement('button');
+    fechar.type='button';
     fechar.textContent='Fechar câmera';
     Object.assign(fechar.style,{padding:'12px 18px',borderRadius:'10px',border:'0',fontWeight:'700',cursor:'pointer'});
     fechar.onclick=pararCamera;
@@ -139,71 +92,64 @@ async function abrirCamera(scanner){
         if(codigos?.length){
           const valor=codigos[0].rawValue;
           pararCamera();
-          tratarLeitura(scanner,valor);
+          preencherCodigo(scanner,valor);
           return;
         }
       }catch{}
       frameAtual=requestAnimationFrame(detectar);
     };
     detectar();
-  }catch(err){
+  }catch{
     pararCamera();
     mensagem(scanner,'Não foi possível abrir a câmera. Verifique a permissão do navegador.','erro');
   }
 }
 
-function atualizarCartao(scanner,id){
-  const card=scanner.querySelector('.sectorBarcodeCard');
-  if(!card)return;
-  card.querySelector('.sectorBarcodeTitle').textContent=`Código fixo do setor ${id} — ${NOMES_SETORES[id]}`;
-  card.querySelector('.sectorBarcodeValue').textContent=CODIGOS_SETORES[id];
-  const svg=card.querySelector('svg');
-  if(svg){svg.innerHTML='';renderizarCodigo(svg,CODIGOS_SETORES[id]);}
+function renomearCampo(scanner){
+  const label=labelCodigo(scanner);
+  const input=inputCodigo(scanner);
+  if(!label||!input)return;
+  for(const node of label.childNodes){
+    if(node.nodeType===Node.TEXT_NODE&&node.textContent.trim()){
+      node.textContent='Código único da peça';
+      break;
+    }
+  }
+  input.placeholder='Bipe ou leia o código da peça...';
 }
 
 function aplicar(){
   const titulo=[...document.querySelectorAll('h2')].find(h=>h.textContent?.trim()==='Bipagem de produção');
   if(!titulo)return;
   const scanner=titulo.closest('.panel');
-  if(!scanner||scanner.querySelector('.sectorBarcodeCard'))return;
-  const id=setorAtual(scanner);
-  const card=document.createElement('div');
-  card.className='sectorBarcodeCard';
-  Object.assign(card.style,{marginTop:'14px',padding:'14px',border:'1px solid #dbeafe',borderRadius:'14px',background:'#f8fbff'});
-  const title=document.createElement('div');
-  title.className='sectorBarcodeTitle';
-  title.style.fontWeight='800';
-  title.style.marginBottom='8px';
-  const value=document.createElement('div');
-  value.className='sectorBarcodeValue';
-  Object.assign(value.style,{fontFamily:'monospace',fontSize:'18px',fontWeight:'800',letterSpacing:'1px'});
-  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
-  svg.style.width='100%';
-  svg.style.maxWidth='360px';
-  svg.style.marginTop='8px';
-  const actions=document.createElement('div');
-  Object.assign(actions.style,{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'10px'});
-  const camera=document.createElement('button');
-  camera.type='button';
-  camera.textContent='Ler com câmera';
-  Object.assign(camera.style,{padding:'10px 14px',borderRadius:'10px',border:'1px solid #93c5fd',background:'#fff',color:'#1d4ed8',fontWeight:'800',cursor:'pointer'});
-  camera.onclick=()=>abrirCamera(scanner);
-  const imprimir=document.createElement('button');
-  imprimir.type='button';
-  imprimir.textContent='Imprimir código do setor';
-  Object.assign(imprimir.style,{padding:'10px 14px',borderRadius:'10px',border:'1px solid #cbd5e1',background:'#fff',fontWeight:'800',cursor:'pointer'});
-  imprimir.onclick=()=>{
-    const w=window.open('','_blank','width=600,height=500');
-    if(!w)return;
-    w.document.write(`<html><head><title>${CODIGOS_SETORES[setorAtual(scanner)]}</title></head><body style="font-family:Arial;text-align:center;padding:30px"><h2>Setor ${setorAtual(scanner)} - ${NOMES_SETORES[setorAtual(scanner)]}</h2><div id="barcode"></div><h3>${CODIGOS_SETORES[setorAtual(scanner)]}</h3><script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script><script>document.getElementById('barcode').innerHTML='<svg id="b"></svg>';JsBarcode('#b','${CODIGOS_SETORES[setorAtual(scanner)]}',{format:'CODE128',height:90,fontSize:22});setTimeout(()=>window.print(),500);<\/script></body></html>`);
-    w.document.close();
-  };
-  actions.append(camera,imprimir);
-  card.append(title,value,svg,actions);
-  scanner.appendChild(card);
-  atualizarCartao(scanner,id);
-  const select=selectSetor(scanner);
-  select?.addEventListener('change',()=>atualizarCartao(scanner,Number(select.value||1)));
+  if(!scanner)return;
+
+  scanner.querySelector('.sectorBarcodeCard')?.remove();
+  renomearCampo(scanner);
+
+  const input=inputCodigo(scanner);
+  if(!input)return;
+  const label=input.closest('label');
+  if(!label)return;
+
+  if(!scanner.querySelector('.pieceScannerHelp')){
+    const help=document.createElement('div');
+    help.className='pieceScannerHelp';
+    help.textContent='Use o mesmo código da peça do início ao fim da produção. O setor é definido automaticamente pelo cadastro do funcionário.';
+    Object.assign(help.style,{margin:'8px 0 10px',padding:'10px 12px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',color:'#475569',lineHeight:'1.4'});
+    label.insertAdjacentElement('afterend',help);
+  }
+
+  if(!scanner.querySelector('.cameraPieceBtn')){
+    const camera=document.createElement('button');
+    camera.type='button';
+    camera.className='cameraPieceBtn';
+    camera.textContent='Ler código da peça com câmera';
+    Object.assign(camera.style,{width:'100%',margin:'0 0 10px',padding:'11px 14px',borderRadius:'10px',border:'1px solid #93c5fd',background:'#fff',color:'#1d4ed8',fontWeight:'800',cursor:'pointer'});
+    camera.onclick=()=>abrirCamera(scanner);
+    const help=scanner.querySelector('.pieceScannerHelp');
+    help?.insertAdjacentElement('afterend',camera);
+  }
 }
 
 const obs=new MutationObserver(()=>setTimeout(aplicar,120));
