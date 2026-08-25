@@ -54,14 +54,10 @@ async function abrirGerador(scanner){
   if(abrindo)return;
   abrindo=true;
   const setor=Number(buscarSelectSetor(scanner)?.value||1);
-  if(setor!==1){
-    abrindo=false;
-    return window.alert('As etiquetas devem ser geradas no Setor 1 - Corte e destaque.');
-  }
+  if(setor!==1){abrindo=false;return window.alert('As etiquetas devem ser geradas no Setor 1 - Corte e destaque.');}
   const modeloPadrao=buscarSelectModelo(scanner)?.value||'';
   const {data:modelos}=await supabase.from('modelos_espelhos').select('nome,ativo').eq('ativo',true).order('nome');
   const listaModelos=(modelos||[]).map(m=>m.nome);
-
   const modal=document.createElement('div');
   modal.className='labelGeneratorModal';
   Object.assign(modal.style,{position:'fixed',inset:'0',background:'rgba(15,23,42,.72)',zIndex:'99999',display:'flex',alignItems:'center',justifyContent:'center',padding:'18px'});
@@ -76,41 +72,33 @@ async function abrirGerador(scanner){
   card.querySelector('.lgCancelar').onclick=fecharModal;
   card.querySelector('.lgGerar').onclick=async()=>{
     const qtd=Math.max(1,Math.min(300,Number(card.querySelector('.lgQtd').value||1)));
-    const modelo=sel.value;
-    const msg=card.querySelector('.lgMsg');
-    const btn=card.querySelector('.lgGerar');
+    const modelo=sel.value;const msg=card.querySelector('.lgMsg');const btn=card.querySelector('.lgGerar');
     if(!modelo)return msg.textContent='Selecione um modelo.';
     btn.disabled=true;btn.textContent='Gerando...';msg.textContent='Reservando códigos no sistema...';
     const codigos=Array.from({length:qtd},(_,i)=>codigoPeca(i+1));
     const registros=codigos.map(c=>({codigo_barras:c,modelo,ativo:true}));
     const {error}=await supabase.from('produtos').insert(registros);
     if(error){btn.disabled=false;btn.textContent='Gerar e imprimir';msg.textContent='Erro ao gerar etiquetas: '+error.message;return;}
-    msg.textContent=`${qtd} etiquetas geradas com sucesso.`;
-    await imprimirEtiquetas(codigos,modelo);
-    setTimeout(fecharModal,700);
+    msg.textContent=`${qtd} etiquetas geradas com sucesso.`;await imprimirEtiquetas(codigos,modelo);setTimeout(fecharModal,700);
   };
 }
 
 function aplicar(){
-  const scanner=buscarScanner();
-  if(!scanner)return;
-  const setorSelect=buscarSelectSetor(scanner);
-  const setor=Number(setorSelect?.value||1);
+  const scanner=buscarScanner();if(!scanner)return;
+  const setorSelect=buscarSelectSetor(scanner);const setor=Number(setorSelect?.value||1);
   let btn=scanner.querySelector('.labelGeneratorBtn');
   if(setor!==1){if(btn)btn.style.display='none';return;}
   if(!btn){
-    btn=document.createElement('button');
-    btn.type='button';btn.className='labelGeneratorBtn';btn.textContent='Gerar etiquetas das peças';
-    Object.assign(btn.style,{marginTop:'10px',padding:'11px 14px',borderRadius:'10px',border:'1px solid #cbd5e1',background:'#fff',fontWeight:'800',cursor:'pointer',width:'100%'});
+    btn=document.createElement('button');btn.type='button';btn.className='labelGeneratorBtn';
+    Object.assign(btn.style,{marginTop:'10px',padding:'11px 14px',borderRadius:'10px',border:'1px solid #cbd5e1',background:'#fff',fontWeight:'800',cursor:'pointer',width:'100%',color:'#2563eb',fontSize:'16px'});
     btn.onclick=()=>abrirGerador(scanner);
-    const form=scanner.querySelector('form');
-    if(form)form.appendChild(btn);else scanner.appendChild(btn);
+    const form=scanner.querySelector('form');if(form)form.appendChild(btn);else scanner.appendChild(btn);
   }
+  btn.textContent='GERAR ETIQUETAS';
+  btn.style.color='#2563eb';
   btn.style.display='block';
   if(setorSelect&&!setorSelect.dataset.labelGeneratorBound){setorSelect.dataset.labelGeneratorBound='1';setorSelect.addEventListener('change',()=>setTimeout(aplicar,50));}
 }
 
-const obs=new MutationObserver(()=>setTimeout(aplicar,120));
-obs.observe(document.documentElement,{subtree:true,childList:true});
-window.addEventListener('load',()=>setTimeout(aplicar,800));
-setInterval(aplicar,2500);
+const obs=new MutationObserver(()=>setTimeout(aplicar,120));obs.observe(document.documentElement,{subtree:true,childList:true});
+window.addEventListener('load',()=>setTimeout(aplicar,800));setInterval(aplicar,2500);
