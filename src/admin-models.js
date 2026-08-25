@@ -14,6 +14,12 @@ function estilizar(btn,tipo='editar'){
   btn.style.marginLeft='6px';
 }
 
+function atualizarResumo(painel){
+  const linhas=[...painel.querySelectorAll('.employeeRow')].filter(r=>r.style.display!=='none');
+  const subtitulo=painel.querySelector('.panelTitle p');
+  if(subtitulo)subtitulo.textContent=`${linhas.length} ativos • ${linhas.length} no total`;
+}
+
 async function aplicarBotoesModelos(){
   if(processando)return;
   const titulo=[...document.querySelectorAll('h2')].find(h=>h.textContent?.trim()==='Modelos cadastrados');
@@ -25,12 +31,20 @@ async function aplicarBotoesModelos(){
   if(error||!modelos)return;
 
   for(const row of painel.querySelectorAll('.employeeRow')){
-    if(row.querySelector('.modelAdminActions'))continue;
     const nomeEl=row.querySelector('.employeeName b');
     if(!nomeEl)continue;
     const nomeAtual=(nomeEl.textContent||'').trim();
     const modelo=modelos.find(m=>(m.nome||'').trim().toLowerCase()===nomeAtual.toLowerCase());
     if(!modelo)continue;
+
+    // Modelos excluídos ficam preservados no banco apenas para histórico,
+    // mas não são mais exibidos na administração nem na bipagem.
+    if(modelo.ativo===false){
+      row.style.display='none';
+      continue;
+    }
+
+    if(row.querySelector('.modelAdminActions'))continue;
 
     const acoes=document.createElement('div');
     acoes.className='modelAdminActions';
@@ -50,12 +64,12 @@ async function aplicarBotoesModelos(){
       processando=true;
       alterar.disabled=true;
       alterar.textContent='Salvando...';
-      const {error}=await supabase.from('modelos_espelhos').update({nome:nomeNovo}).eq('id',modelo.id);
+      const {data,error}=await supabase.from('modelos_espelhos').update({nome:nomeNovo}).eq('id',modelo.id).select('id,nome').maybeSingle();
       processando=false;
-      if(error){
+      if(error||!data){
         alterar.disabled=false;
         alterar.textContent='Alterar modelo';
-        return window.alert(error.code==='23505'?'Já existe um modelo com esse nome.':error.message);
+        return window.alert(error?.code==='23505'?'Já existe um modelo com esse nome.':error?.message||'Não foi possível alterar o modelo.');
       }
       window.alert('Modelo alterado com sucesso.');
       window.location.reload();
@@ -65,25 +79,36 @@ async function aplicarBotoesModelos(){
     excluir.textContent='Excluir modelo';
     estilizar(excluir,'excluir');
     excluir.addEventListener('click',async()=>{
-      if(!window.confirm(`Excluir o modelo ${modelo.nome}?\n\nAs bipagens já registradas continuarão no histórico.`))return;
+      if(!window.confirm(`Excluir o modelo ${modelo.nome}?\n\nEle deixará de aparecer na produção. As bipagens já registradas continuarão no histórico.`))return;
       processando=true;
       excluir.disabled=true;
       excluir.textContent='Excluindo...';
-      const {error}=await supabase.from('modelos_espelhos').delete().eq('id',modelo.id);
+
+      const {data,error}=await supabase
+        .from('modelos_espelhos')
+        .update({ativo:false})
+        .eq('id',modelo.id)
+        .select('id,ativo')
+        .maybeSingle();
+
       processando=false;
-      if(error){
+      if(error||!data||data.ativo!==false){
         excluir.disabled=false;
         excluir.textContent='Excluir modelo';
-        return window.alert(error.message||'Não foi possível excluir o modelo.');
+        return window.alert(error?.message||'Não foi possível excluir o modelo. Verifique as permissões no Supabase.');
       }
-      window.alert('Modelo excluído com sucesso.');
-      window.location.reload();
+
+      row.style.display='none';
+      atualizarResumo(painel);
+      window.alert('Modelo excluído com sucesso. Ele não aparecerá mais na bipagem.');
     });
 
     acoes.appendChild(alterar);
     acoes.appendChild(excluir);
     row.appendChild(acoes);
   }
+
+  atualizarResumo(painel);
 }
 
 const observer=new MutationObserver(()=>{
