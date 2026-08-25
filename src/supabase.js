@@ -9,13 +9,16 @@ const client = supabaseConfigured ? createClient(url, publishableKey) : null
 
 // Mantém compatibilidade com o nome usado no painel de Modelos.
 // No banco, a tabela oficial criada pelo administrador é `modelos_espelhos`.
+// Métodos do Supabase precisam permanecer vinculados à instância real do cliente,
+// principalmente rpc(), auth e storage, para evitar "Failed to fetch" em alguns navegadores móveis.
 export const supabase = client
   ? new Proxy(client, {
       get(target, prop) {
         if (prop === 'from') {
           return (table) => target.from(table === 'modelos' ? 'modelos_espelhos' : table)
         }
-        return target[prop]
+        const value = Reflect.get(target, prop, target)
+        return typeof value === 'function' ? value.bind(target) : value
       },
     })
   : null
