@@ -7,7 +7,7 @@ import'./styles.css';
 const setores=[{id:1,nome:'1. Corte e destaque'},{id:2,nome:'2. Cola e EVA'},{id:3,nome:'3. Colagem do couro'},{id:4,nome:'4. Limpeza'},{id:5,nome:'5. Finalização e alça'},{id:6,nome:'6. Embalagem'}];
 const modelosPadrao=['Redondo 60x60','Gota 54x60','Redondo 40x40','Orgânica 90x50'];
 const META=200;
-const dominioInterno='usuarios.local';
+const dominioInterno='usuarios.example.com';
 const nomeSetor=id=>setores.find(s=>s.id===id)?.nome.replace(/^\d\. /,'')||'Sem setor';
 const normalizarUsuario=v=>v.trim().toLowerCase().replace(/[^a-z0-9._-]/g,'');
 const emailInterno=u=>`${normalizarUsuario(u)}@${dominioInterno}`;
