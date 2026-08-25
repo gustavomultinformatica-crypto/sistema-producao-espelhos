@@ -1,0 +1,1 @@
+Publicacao da versao com botao Liberar acesso e verificacao segura no Supabase.
