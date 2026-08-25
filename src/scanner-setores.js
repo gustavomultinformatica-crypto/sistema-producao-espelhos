@@ -33,6 +33,22 @@ function mensagem(scanner,texto,tipo='ok'){
   el.style.color=tipo==='erro'?'#b42318':'#1d4ed8';
 }
 
+function registrarAutomaticamente(scanner,lido){
+  if(scanner.dataset.autoSubmitting==='1')return;
+  const form=scanner.querySelector('form');
+  const input=inputCodigo(scanner);
+  if(!form||!input)return;
+  scanner.dataset.autoSubmitting='1';
+  mensagem(scanner,`Peça ${lido} lida. Registrando automaticamente...`);
+  setTimeout(()=>{
+    try{
+      if((input.value||'').trim()===lido)form.requestSubmit();
+    }finally{
+      setTimeout(()=>{scanner.dataset.autoSubmitting='0';},900);
+    }
+  },220);
+}
+
 function preencherCodigo(scanner,valor){
   const lido=(valor||'').trim();
   if(!lido)return;
@@ -43,7 +59,7 @@ function preencherCodigo(scanner,valor){
   input.dispatchEvent(new Event('input',{bubbles:true}));
   input.dispatchEvent(new Event('change',{bubbles:true}));
   input.focus();
-  mensagem(scanner,`Peça ${lido} lida com sucesso. Agora registre a peça.`);
+  registrarAutomaticamente(scanner,lido);
 }
 
 function pararCamera(){
@@ -75,7 +91,7 @@ function criarModal(){
   Object.assign(texto.style,{color:'#fff',fontWeight:'700',margin:'14px 0 6px',textAlign:'center'});
 
   const dica=document.createElement('div');
-  dica.textContent='Mantenha o código centralizado e com boa iluminação.';
+  dica.textContent='Ao reconhecer o código, a peça será registrada automaticamente.';
   Object.assign(dica.style,{color:'#cbd5e1',fontSize:'13px',marginBottom:'14px',textAlign:'center'});
 
   const fechar=document.createElement('button');
@@ -189,7 +205,7 @@ function aplicar(){
   if(!scanner.querySelector('.pieceScannerHelp')){
     const help=document.createElement('div');
     help.className='pieceScannerHelp';
-    help.textContent='Use o mesmo código da peça do início ao fim da produção. O setor é definido automaticamente pelo cadastro do funcionário.';
+    help.textContent='Use o mesmo código da peça do início ao fim da produção. Pela câmera, a peça é registrada automaticamente após a leitura.';
     Object.assign(help.style,{margin:'8px 0 10px',padding:'10px 12px',background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',color:'#475569',lineHeight:'1.4'});
     label.insertAdjacentElement('afterend',help);
   }
