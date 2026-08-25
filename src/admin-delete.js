@@ -13,6 +13,17 @@ function estiloExcluir(btn){
   btn.style.cursor='pointer';
 }
 
+function estiloAlterar(btn){
+  btn.type='button';
+  btn.style.background='#fff';
+  btn.style.color='#2563eb';
+  btn.style.border='1px solid #93c5fd';
+  btn.style.borderRadius='10px';
+  btn.style.padding='10px 12px';
+  btn.style.fontWeight='700';
+  btn.style.cursor='pointer';
+}
+
 async function limparPreCadastroDoPerfil(perfil){
   if(!perfil)return;
   const filtros=[];
@@ -28,23 +39,53 @@ async function aplicarBotoesFuncionarios(session){
   const painel=titulo.closest('.panel');
   if(!painel)return;
 
-  const {data:perfis,error}=await supabase.from('perfis').select('usuario_id,nome,usuario,email,papel');
+  const {data:perfis,error}=await supabase.from('perfis').select('usuario_id,nome,usuario,email,papel,setor_id');
   if(error||!perfis)return;
 
   for(const row of painel.querySelectorAll('.employeeRow')){
-    if(row.querySelector('.deleteEmployeeBtn'))continue;
     const small=row.querySelector('.employeeName small');
     if(!small)continue;
     const identificador=(small.textContent||'').trim().toLowerCase();
     const perfil=perfis.find(p=>{
-      if(p.usuario_id===session.user.id)return false;
-      if(p.papel==='admin')return false;
       const u=p.usuario?`@${p.usuario}`.toLowerCase():'';
       const e=(p.email||'').toLowerCase();
       return identificador===u||identificador===e;
     });
     if(!perfil)continue;
 
+    const selects=row.querySelectorAll('select');
+    const setorSelect=selects[0];
+
+    if(perfil.papel!=='admin'&&setorSelect&&!row.querySelector('.editSectorBtn')){
+      setorSelect.disabled=true;
+      const btnAlterar=document.createElement('button');
+      btnAlterar.className='editSectorBtn';
+      btnAlterar.textContent='Alterar setor';
+      estiloAlterar(btnAlterar);
+      btnAlterar.addEventListener('click',()=>{
+        if(setorSelect.disabled){
+          setorSelect.disabled=false;
+          setorSelect.focus();
+          btnAlterar.textContent='Concluir alteração';
+          btnAlterar.style.background='#eff6ff';
+        }else{
+          setorSelect.disabled=true;
+          btnAlterar.textContent='Alterar setor';
+          btnAlterar.style.background='#fff';
+          window.alert('Alteração de setor concluída.');
+        }
+      });
+      setorSelect.addEventListener('change',()=>{
+        window.setTimeout(()=>{
+          setorSelect.disabled=true;
+          btnAlterar.textContent='Alterar setor';
+          btnAlterar.style.background='#fff';
+        },700);
+      });
+      row.appendChild(btnAlterar);
+    }
+
+    if(perfil.usuario_id===session.user.id||perfil.papel==='admin'||row.querySelector('.deleteEmployeeBtn'))continue;
     const btn=document.createElement('button');
     btn.className='deleteEmployeeBtn';
     btn.textContent='Excluir funcionário';
