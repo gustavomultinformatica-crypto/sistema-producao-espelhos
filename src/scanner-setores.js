@@ -1,7 +1,10 @@
+import{BrowserMultiFormatReader}from'@zxing/browser';
+
 let cameraAtiva=false;
 let streamAtual=null;
 let detectorAtual=null;
 let frameAtual=null;
+let controlesZXing=null;
 
 function inputCodigo(scanner){
   const labels=[...scanner.querySelectorAll('label')];
@@ -38,6 +41,7 @@ function preencherCodigo(scanner,valor){
   const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
   setter?.call(input,lido);
   input.dispatchEvent(new Event('input',{bubbles:true}));
+  input.dispatchEvent(new Event('change',{bubbles:true}));
   input.focus();
   mensagem(scanner,`Peça ${lido} lida com sucesso. Agora registre a peça.`);
 }
@@ -46,62 +50,112 @@ function pararCamera(){
   cameraAtiva=false;
   if(frameAtual)cancelAnimationFrame(frameAtual);
   frameAtual=null;
+  try{controlesZXing?.stop?.()}catch{}
+  controlesZXing=null;
   streamAtual?.getTracks()?.forEach(t=>t.stop());
   streamAtual=null;
   detectorAtual=null;
   document.querySelector('.scannerCameraModal')?.remove();
 }
 
+function criarModal(){
+  const modal=document.createElement('div');
+  modal.className='scannerCameraModal';
+  Object.assign(modal.style,{position:'fixed',inset:'0',background:'rgba(15,23,42,.94)',zIndex:'99999',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'20px'});
+
+  const video=document.createElement('video');
+  video.setAttribute('playsinline','');
+  video.setAttribute('muted','');
+  video.autoplay=true;
+  video.muted=true;
+  Object.assign(video.style,{width:'min(94vw,520px)',maxHeight:'68vh',objectFit:'cover',borderRadius:'18px',background:'#000'});
+
+  const texto=document.createElement('div');
+  texto.textContent='Aponte a câmera para o código único da peça';
+  Object.assign(texto.style,{color:'#fff',fontWeight:'700',margin:'14px 0 6px',textAlign:'center'});
+
+  const dica=document.createElement('div');
+  dica.textContent='Mantenha o código centralizado e com boa iluminação.';
+  Object.assign(dica.style,{color:'#cbd5e1',fontSize:'13px',marginBottom:'14px',textAlign:'center'});
+
+  const fechar=document.createElement('button');
+  fechar.type='button';
+  fechar.textContent='Fechar câmera';
+  Object.assign(fechar.style,{padding:'12px 18px',borderRadius:'10px',border:'0',fontWeight:'700',cursor:'pointer'});
+  fechar.onclick=pararCamera;
+
+  modal.append(video,texto,dica,fechar);
+  document.body.appendChild(modal);
+  return{modal,video};
+}
+
+async function abrirComBarcodeDetector(scanner,video){
+  detectorAtual=new BarcodeDetector({formats:['code_128','ean_13','ean_8','qr_code']});
+  streamAtual=await navigator.mediaDevices.getUserMedia({
+    video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},
+    audio:false
+  });
+  video.srcObject=streamAtual;
+  await video.play();
+
+  const detectar=async()=>{
+    if(!cameraAtiva)return;
+    try{
+      const codigos=await detectorAtual.detect(video);
+      if(codigos?.length){
+        const valor=codigos[0].rawValue;
+        pararCamera();
+        preencherCodigo(scanner,valor);
+        return;
+      }
+    }catch{}
+    frameAtual=requestAnimationFrame(detectar);
+  };
+  detectar();
+}
+
+async function abrirComZXing(scanner,video){
+  const leitor=new BrowserMultiFormatReader();
+  controlesZXing=await leitor.decodeFromConstraints(
+    {video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false},
+    video,
+    (resultado)=>{
+      if(!cameraAtiva||!resultado)return;
+      const valor=resultado.getText?.()||resultado.text||'';
+      if(!valor)return;
+      pararCamera();
+      preencherCodigo(scanner,valor);
+    }
+  );
+}
+
 async function abrirCamera(scanner){
   if(cameraAtiva)return;
   if(!navigator.mediaDevices?.getUserMedia){
-    mensagem(scanner,'Este navegador não permite usar a câmera. Use o leitor de código de barras.','erro');
+    mensagem(scanner,'Este aparelho não permite abrir a câmera pelo navegador.','erro');
     return;
   }
-  if(!('BarcodeDetector' in window)){
-    mensagem(scanner,'A leitura automática pela câmera não é suportada neste navegador. Tente Chrome/Edge atualizado ou use leitor Bluetooth/USB.','erro');
-    return;
-  }
+
+  cameraAtiva=true;
+  const{video}=criarModal();
+
   try{
-    detectorAtual=new BarcodeDetector({formats:['code_128','ean_13','ean_8','qr_code']});
-    streamAtual=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
-    cameraAtiva=true;
-    const modal=document.createElement('div');
-    modal.className='scannerCameraModal';
-    Object.assign(modal.style,{position:'fixed',inset:'0',background:'rgba(15,23,42,.92)',zIndex:'99999',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:'20px'});
-    const video=document.createElement('video');
-    video.srcObject=streamAtual;
-    video.setAttribute('playsinline','');
-    video.autoplay=true;
-    Object.assign(video.style,{width:'min(94vw,520px)',borderRadius:'18px',background:'#000'});
-    const texto=document.createElement('div');
-    texto.textContent='Aponte a câmera para o código único da peça';
-    Object.assign(texto.style,{color:'#fff',fontWeight:'700',margin:'14px 0'});
-    const fechar=document.createElement('button');
-    fechar.type='button';
-    fechar.textContent='Fechar câmera';
-    Object.assign(fechar.style,{padding:'12px 18px',borderRadius:'10px',border:'0',fontWeight:'700',cursor:'pointer'});
-    fechar.onclick=pararCamera;
-    modal.append(video,texto,fechar);
-    document.body.appendChild(modal);
-    await video.play();
-    const detectar=async()=>{
-      if(!cameraAtiva)return;
-      try{
-        const codigos=await detectorAtual.detect(video);
-        if(codigos?.length){
-          const valor=codigos[0].rawValue;
-          pararCamera();
-          preencherCodigo(scanner,valor);
-          return;
-        }
-      }catch{}
-      frameAtual=requestAnimationFrame(detectar);
-    };
-    detectar();
-  }catch{
+    if('BarcodeDetector'in window){
+      await abrirComBarcodeDetector(scanner,video);
+    }else{
+      await abrirComZXing(scanner,video);
+    }
+  }catch(erro){
+    console.error('Erro ao abrir scanner:',erro);
     pararCamera();
-    mensagem(scanner,'Não foi possível abrir a câmera. Verifique a permissão do navegador.','erro');
+    const nome=erro?.name||'';
+    if(nome==='NotAllowedError'||nome==='SecurityError'){
+      mensagem(scanner,'A câmera está bloqueada. No iPhone, permita o acesso à câmera para este site e tente novamente.','erro');
+    }else if(nome==='NotFoundError'||nome==='DevicesNotFoundError'){
+      mensagem(scanner,'Nenhuma câmera disponível foi encontrada neste aparelho.','erro');
+    }else{
+      mensagem(scanner,'Não foi possível iniciar a leitura. Feche e abra o navegador e tente novamente.','erro');
+    }
   }
 }
 
@@ -150,9 +204,13 @@ function aplicar(){
     const help=scanner.querySelector('.pieceScannerHelp');
     help?.insertAdjacentElement('afterend',camera);
   }
+
+  const aviso=scanner.querySelector('.scannerEnhanceMsg');
+  if(aviso&&/não é suportada neste navegador|chrome\/edge atualizado/i.test(aviso.textContent||''))aviso.remove();
 }
 
 const obs=new MutationObserver(()=>setTimeout(aplicar,120));
 obs.observe(document.documentElement,{subtree:true,childList:true});
 window.addEventListener('load',()=>setTimeout(aplicar,700));
+window.addEventListener('pagehide',pararCamera);
 setInterval(aplicar,2500);
