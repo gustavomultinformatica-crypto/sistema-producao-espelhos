@@ -41,12 +41,41 @@ function garantirEstilo(){
   document.head.appendChild(style);
 }
 
+function tocarSomSucesso(){
+  try{
+    const AudioCtx=window.AudioContext||window.webkitAudioContext;
+    if(!AudioCtx)return;
+    const ctx=new AudioCtx();
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+    osc.type='sine';
+    osc.frequency.setValueAtTime(880,ctx.currentTime);
+    gain.gain.setValueAtTime(0.0001,ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.22,ctx.currentTime+0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.18);
+    osc.connect(gain);gain.connect(ctx.destination);
+    osc.start();osc.stop(ctx.currentTime+0.2);
+    osc.onended=()=>ctx.close?.();
+  }catch{}
+}
+
+function limparEPreparar(scanner){
+  const i=buscarInputCodigo(scanner);
+  if(!i)return;
+  const setter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value')?.set;
+  setter?.call(i,'');
+  i.dispatchEvent(new Event('input',{bubbles:true}));
+  i.dispatchEvent(new Event('change',{bubbles:true}));
+  i.focus();
+}
+
 function mostrarSucesso(texto){
   document.querySelector('.mobileSuccessToast')?.remove();
   const el=document.createElement('div');
   el.className='mobileSuccessToast';
   el.textContent=texto||'✓ PEÇA REGISTRADA';
   document.body.appendChild(el);
+  tocarSomSucesso();
   if(navigator.vibrate)navigator.vibrate([100,50,100]);
   setTimeout(()=>el.remove(),1800);
 }
@@ -67,7 +96,7 @@ function aplicar(){
   if(input&&!scanner.querySelector('.mobileScanHero')){
     const hero=document.createElement('div');
     hero.className='mobileScanHero';
-    hero.innerHTML='<div><strong>Bipagem rápida</strong><span>Leia a etiqueta e registre a peça</span></div><button type="button">ABRIR CÂMERA</button>';
+    hero.innerHTML='<div><strong>Bipagem rápida</strong><span>Leia a etiqueta: o registro é automático</span></div><button type="button">ABRIR CÂMERA</button>';
     hero.querySelector('button').onclick=()=>scanner.querySelector('.cameraPieceBtn')?.click();
     const form=scanner.querySelector('form');
     form?.insertAdjacentElement('beforebegin',hero);
@@ -77,11 +106,11 @@ function aplicar(){
     scanner.dataset.mobileMsgObserver='1';
     const obs=new MutationObserver(()=>{
       const textos=[...scanner.querySelectorAll('.message,.scannerEnhanceMsg')].map(e=>(e.textContent||'').trim());
-      const sucesso=textos.find(t=>/registrad|sucesso|conclu/i.test(t)&&!/não|erro|falh/i.test(t));
+      const sucesso=textos.find(t=>/registrad|sucesso|conclu/i.test(t)&&!/registrando|não|erro|falh/i.test(t));
       if(sucesso&&scanner.dataset.lastSuccess!==sucesso){
         scanner.dataset.lastSuccess=sucesso;
         mostrarSucesso('✓ PEÇA REGISTRADA');
-        setTimeout(()=>{const i=buscarInputCodigo(scanner);if(i){i.value='';i.dispatchEvent(new Event('input',{bubbles:true}));}},250);
+        setTimeout(()=>limparEPreparar(scanner),250);
       }
     });
     obs.observe(scanner,{subtree:true,childList:true,characterData:true});
