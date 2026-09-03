@@ -5,6 +5,7 @@ const setores=[
   {id:4,nome:'Limpeza'},{id:5,nome:'Finalização e alça'},{id:6,nome:'Embalagem'}
 ];
 const META_DIA=200;
+const PAGE_SIZE=1000;
 let atualizando=false;
 let ultimoPeriodo='';
 let adminCache={valor:null,expira:0};
@@ -19,6 +20,26 @@ function garantirEstilo(){
 function periodoAtual(){const ativo=[...document.querySelectorAll('.periodBar button.active')][0];const txt=(ativo?.textContent||'Hoje').toLowerCase();if(txt.includes('30'))return{chave:'30d',dias:30,label:'30 dias'};if(txt.includes('7'))return{chave:'7d',dias:7,label:'7 dias'};return{chave:'hoje',dias:1,label:'Hoje'};}
 function inicio(dias){const d=new Date();d.setHours(0,0,0,0);if(dias>1)d.setDate(d.getDate()-(dias-1));return d}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+
+async function buscarTodasBipagens(desde){
+  const todas=[];
+  for(let from=0;;from+=PAGE_SIZE){
+    const to=from+PAGE_SIZE-1;
+    const {data,error}=await supabase
+      .from('bipagens')
+      .select('id,criado_em,setor_id,usuario_id,produto_id,produtos(codigo_barras,modelo)')
+      .gte('criado_em',desde)
+      .order('criado_em',{ascending:false})
+      .range(from,to);
+    if(error)throw error;
+    const lote=data||[];
+    todas.push(...lote);
+    if(lote.length<PAGE_SIZE)break;
+    if(from>50000)break;
+  }
+  return todas;
+}
+
 async function ehAdmin(){
   const agora=Date.now();if(adminCache.expira>agora&&adminCache.valor!==null)return adminCache.valor;
   const{data:{session}}=await supabase.auth.getSession();if(!session){adminCache={valor:false,expira:agora+30000};return false;}
@@ -32,26 +53,24 @@ async function atualizar(){
   try{
     if(!(await ehAdmin())){document.querySelector('.factoryMonitor')?.remove();return;}
     garantirEstilo();const per=periodoAtual(),desde=inicio(per.dias).toISOString();
-    const [{data:regs,error},{data:perfis}]=await Promise.all([
-      supabase.from('bipagens').select('id,criado_em,setor_id,usuario_id,produto_id,produtos(codigo_barras,modelo)').gte('criado_em',desde).order('criado_em',{ascending:false}),
+    const [r,{data:perfis,error:erroPerfis}]=await Promise.all([
+      buscarTodasBipagens(desde),
       supabase.from('perfis').select('usuario_id,nome,setor_id,ativo')
-    ]);if(error)throw error;
-    const r=regs||[],porProduto=new Map();for(const x of r){const k=x.produto_id||x.produtos?.codigo_barras;if(!k)continue;const item=porProduto.get(k)||{codigo:x.produtos?.codigo_barras||'-',modelo:x.produtos?.modelo||'-',etapas:new Set(),max:0};item.etapas.add(x.setor_id);item.max=Math.max(item.max,Number(x.setor_id)||0);porProduto.set(k,item)}
-    const pecas=[...porProduto.values()],concluidas=pecas.filter(p=>p.etapas.has(6)).length,andamento=pecas.filter(p=>!p.etapas.has(6)).length,iniciadas=r.filter(x=>x.setor_id===1).length,meta=META_DIA*per.dias,progresso=Math.min(100,Math.round((concluidas/meta)*100)),totais=setores.map(s=>({...s,total:r.filter(x=>x.setor_id===s.id).length}));
+    ]);
+    if(erroPerfis)throw erroPerfis;
+    const porProduto=new Map();for(const x of r){const k=x.produto_id||x.produtos?.codigo_barras;if(!k)continue;const item=porProduto.get(k)||{codigo:x.produtos?.codigo_barras||'-',modelo:x.produtos?.modelo||'-',etapas:new Set(),max:0};item.etapas.add(Number(x.setor_id));item.max=Math.max(item.max,Number(x.setor_id)||0);porProduto.set(k,item)}
+    const pecas=[...porProduto.values()],concluidas=pecas.filter(p=>p.etapas.has(6)).length,andamento=pecas.filter(p=>!p.etapas.has(6)).length,iniciadas=r.filter(x=>Number(x.setor_id)===1).length,meta=META_DIA*per.dias,progresso=Math.min(100,Math.round((concluidas/meta)*100)),totais=setores.map(s=>({...s,total:r.filter(x=>Number(x.setor_id)===s.id).length}));
     const modelos=new Map();pecas.forEach(p=>modelos.set(p.modelo,(modelos.get(p.modelo)||0)+1));const topModelos=[...modelos.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8),nomes=new Map((perfis||[]).map(p=>[p.usuario_id,p])),pessoas=new Map();r.forEach(x=>pessoas.set(x.usuario_id,(pessoas.get(x.usuario_id)||0)+1));const ranking=[...pessoas.entries()].map(([id,total])=>({id,total,nome:nomes.get(id)?.nome||'Usuário',setor:nomes.get(id)?.setor_id})).sort((a,b)=>b.total-a.total).slice(0,10),wip=setores.slice(0,5).map(s=>({nome:s.nome,total:pecas.filter(p=>p.max===s.id&&!p.etapas.has(6)).length}));
     let root=document.querySelector('.factoryMonitor');if(!root){root=document.createElement('section');root.className='factoryMonitor';barra.insertAdjacentElement('afterend',root)}
-    root.innerHTML=`<div class="fmHead"><div><h2>Monitor de Produção</h2><p>${per.label} • acompanhamento das peças bipadas em tempo quase real</p></div><button class="fmRefresh" type="button">↻ ATUALIZAR</button></div><div class="fmCards"><div class="fmCard"><small>Peças únicas movimentadas</small><strong>${pecas.length}</strong><p>não soma a mesma peça 6 vezes</p></div><div class="fmCard"><small>Peças concluídas</small><strong>${concluidas}</strong><p>chegaram à embalagem</p></div><div class="fmCard"><small>Em produção</small><strong>${andamento}</strong><p>ainda não chegaram à embalagem</p></div><div class="fmCard"><small>Total de bipagens</small><strong>${r.length}</strong><p>todas as passagens pelos setores</p></div></div><div class="fmPanel"><h3>Meta de peças concluídas</h3><div class="fmSub">${concluidas} de ${meta} peças • ${progresso}% da meta do período</div><div class="fmBar"><i style="width:${progresso}%"></i></div></div><div class="fmGrid"><div class="fmPanel"><h3>Quantidade bipada por setor</h3><div class="fmSub">Cada número representa quantas peças passaram naquele processo.</div>${totais.map((s,i)=>{const pct=Math.min(100,Math.round((s.total/meta)*100));return`<div class="fmSector"><div class="fmNum">${i+1}</div><div><b>${esc(s.nome)}</b><span>${pct}% da meta proporcional</span><div class="fmBar"><i style="width:${pct}%"></i></div></div><strong>${s.total}</strong></div>`}).join('')}</div><div class="fmPanel"><h3>Peças paradas/em andamento</h3><div class="fmSub">Mostra em qual etapa está a última bipagem da peça.</div><div class="fmWip">${wip.map(x=>`<div><b>${x.total}</b><span>${esc(x.nome)}</span></div>`).join('')}</div><div style="margin-top:13px"><b style="font-size:13px">Entraram no corte: ${iniciadas}</b></div></div></div><div class="fmGrid"><div class="fmPanel"><h3>Produção por modelo</h3><div class="fmSub">Peças únicas movimentadas no período.</div>${topModelos.length?topModelos.map(([nome,total])=>`<div class="fmListRow"><div><b>${esc(nome)}</b><small>modelo</small></div><strong>${total}</strong></div>`).join(''):'<div class="fmSub">Nenhuma peça no período.</div>'}</div><div class="fmPanel"><h3>Produtividade por funcionário</h3><div class="fmSub">Quantidade de bipagens registradas por colaborador.</div>${ranking.length?ranking.map((p,i)=>`<div class="fmListRow"><div><b>${i+1}º ${esc(p.nome)}</b><small>${esc(setores.find(s=>s.id===p.setor)?.nome||'Administrador')}</small></div><strong>${p.total}</strong></div>`).join(''):'<div class="fmSub">Nenhuma bipagem no período.</div>'}</div></div><div class="fmUpdated">Atualizado às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>`;
+    root.innerHTML=`<div class="fmHead"><div><h2>Monitor de Produção</h2><p>${per.label} • contagem completa de todas as bipagens do banco</p></div><button class="fmRefresh" type="button">↻ ATUALIZAR</button></div><div class="fmCards"><div class="fmCard"><small>Peças únicas movimentadas</small><strong>${pecas.length}</strong><p>cada código é contado uma única vez</p></div><div class="fmCard"><small>Peças iniciadas no corte</small><strong>${iniciadas}</strong><p>quantidade bipada no setor 1</p></div><div class="fmCard"><small>Peças concluídas</small><strong>${concluidas}</strong><p>chegaram à embalagem</p></div><div class="fmCard"><small>Total de bipagens</small><strong>${r.length}</strong><p>todas as passagens pelos 6 setores</p></div></div><div class="fmPanel"><h3>Meta de peças concluídas</h3><div class="fmSub">${concluidas} de ${meta} peças • ${progresso}% da meta do período</div><div class="fmBar"><i style="width:${progresso}%"></i></div></div><div class="fmGrid"><div class="fmPanel"><h3>Quantidade bipada por setor</h3><div class="fmSub">Agora a consulta carrega todos os registros, mesmo quando passa de 1.000 bipagens.</div>${totais.map((s,i)=>{const pct=Math.min(100,Math.round((s.total/meta)*100));return`<div class="fmSector"><div class="fmNum">${i+1}</div><div><b>${esc(s.nome)}</b><span>${pct}% da meta proporcional</span><div class="fmBar"><i style="width:${pct}%"></i></div></div><strong>${s.total}</strong></div>`}).join('')}</div><div class="fmPanel"><h3>Peças paradas/em andamento</h3><div class="fmSub">Mostra em qual etapa está a última bipagem da peça.</div><div class="fmWip">${wip.map(x=>`<div><b>${x.total}</b><span>${esc(x.nome)}</span></div>`).join('')}</div><div style="margin-top:13px"><b style="font-size:13px">Entraram no corte: ${iniciadas}</b></div></div></div><div class="fmGrid"><div class="fmPanel"><h3>Produção por modelo</h3><div class="fmSub">Peças únicas movimentadas no período.</div>${topModelos.length?topModelos.map(([nome,total])=>`<div class="fmListRow"><div><b>${esc(nome)}</b><small>modelo</small></div><strong>${total}</strong></div>`).join(''):'<div class="fmSub">Nenhuma peça no período.</div>'}</div><div class="fmPanel"><h3>Produtividade por funcionário</h3><div class="fmSub">Quantidade de bipagens registradas por colaborador.</div>${ranking.length?ranking.map((p,i)=>`<div class="fmListRow"><div><b>${i+1}º ${esc(p.nome)}</b><small>${esc(setores.find(s=>s.id===p.setor)?.nome||'Administrador')}</small></div><strong>${p.total}</strong></div>`).join(''):'<div class="fmSub">Nenhuma bipagem no período.</div>'}</div></div><div class="fmUpdated">${r.length.toLocaleString('pt-BR')} registros carregados • Atualizado às ${new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'})}</div>`;
     root.querySelector('.fmRefresh')?.addEventListener('click',()=>atualizar());ultimoPeriodo=per.chave;
   }catch(e){console.error('Monitor de produção:',e)}finally{atualizando=false}
 }
 function agendarAtualizacao(ms=300){clearTimeout(timerDebounce);timerDebounce=setTimeout(()=>atualizar(),ms)}
 function observar(){
   const obs=new MutationObserver((mutacoes)=>{
-    const alterouPeriodo=periodoAtual().chave!==ultimoPeriodo;
-    if(alterouPeriodo)agendarAtualizacao(200);
-    // Não reage às próprias mudanças do monitor; isso evitava um loop de centenas de GETs.
-    const externa=mutacoes.some(m=>!m.target?.closest?.('.factoryMonitor'));
-    if(externa&&document.querySelector('.message.sucesso'))agendarAtualizacao(700);
+    const alterouPeriodo=periodoAtual().chave!==ultimoPeriodo;if(alterouPeriodo)agendarAtualizacao(200);
+    const externa=mutacoes.some(m=>!m.target?.closest?.('.factoryMonitor'));if(externa&&document.querySelector('.message.sucesso'))agendarAtualizacao(700);
   });obs.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
 }
 window.addEventListener('bipagemRapidaConcluida',()=>agendarAtualizacao(500));
