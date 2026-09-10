@@ -29,11 +29,11 @@ begin
     limit 1;
 
     if v_owner is null then
-      select count(*), min(usuario_id) into v_qtd, v_owner
-      from perfis where papel='admin';
+      select count(*) into v_qtd from perfis where papel='admin';
       if v_qtd <> 1 then
         raise exception 'Nao foi possivel identificar o proprietario com seguranca. Deve existir apenas um admin ou um admin chamado/usuario Gustavo.';
       end if;
+      select usuario_id into v_owner from perfis where papel='admin' limit 1;
     end if;
 
     insert into sistema_config(id,owner_user_id) values(1,v_owner);
