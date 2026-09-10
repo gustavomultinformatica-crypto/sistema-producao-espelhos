@@ -67,7 +67,9 @@ async function abrir(){
 
 function instalar(){
  const nav=document.querySelector('.appNav');if(!nav||nav.querySelector('[data-av-button]'))return;
- const b=document.createElement('button');b.type='button';b.className='avNav';b.dataset.avButton='true';b.innerHTML='<span aria-hidden="true">⚠️</span> Ocorrências';b.onclick=abrir;nav.appendChild(b);
+ const b=document.createElement('button');b.type='button';b.className='avNav';b.dataset.avButton='true';b.innerHTML='<span aria-hidden="true">⚠️</span> Ocorrências';b.onclick=abrir;
+ const botaoBipagem=[...nav.querySelectorAll('button')].find(x=>(x.textContent||'').trim().toLowerCase().includes('bipagem'));
+ if(botaoBipagem)botaoBipagem.insertAdjacentElement('afterend',b);else nav.appendChild(b);
 }
 
 estilos();instalar();new MutationObserver(instalar).observe(document.body,{childList:true,subtree:true});
