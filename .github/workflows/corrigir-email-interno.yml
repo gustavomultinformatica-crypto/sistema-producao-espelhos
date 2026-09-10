@@ -1,4 +1,4 @@
-name: Corrigir dominio interno dos usuarios
+name: Corrigir login de usuarios
 
 on:
   push:
@@ -18,22 +18,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ github.token }}
-      - name: Corrigir dominio interno
+
+      - name: Corrigir login com compatibilidade de dominios
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('src/main.jsx')
           s = p.read_text(encoding='utf-8')
-          antigo = "const dominioInterno='usuarios.local';"
-          novo = "const dominioInterno='usuarios.example.com';"
+          antigo = "async function entrar(e){e.preventDefault();if(!identificador||!senha)return setMsg('Informe usuário e senha.');setLoad(true);const{data,error}=await supabase.auth.signInWithPassword({email:authEmail,password:senha});setLoad(false);if(error)return setMsg('Não foi possível entrar. Confira usuário e senha.');onSession(data.session)}"
+          novo = "async function entrar(e){e.preventDefault();if(!identificador||!senha)return setMsg('Informe usuário e senha.');setLoad(true);let resultado=await supabase.auth.signInWithPassword({email:authEmail,password:senha});if(resultado.error&&!identificador.includes('@')){const usuario=normalizarUsuario(identificador);const emailLegado=`${usuario}@usuarios.local`;resultado=await supabase.auth.signInWithPassword({email:emailLegado,password:senha})}setLoad(false);if(resultado.error)return setMsg('Não foi possível entrar. Confira usuário e senha.');onSession(resultado.data.session)}"
           if antigo not in s:
-              raise SystemExit('Dominio antigo nao encontrado')
+              raise SystemExit('Trecho de login esperado nao encontrado')
           p.write_text(s.replace(antigo, novo, 1), encoding='utf-8')
           PY
+
       - name: Salvar correcao
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/main.jsx
-          git commit -m "Corrige email interno dos colaboradores"
-          git push
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteracao necessaria"
+          else
+            git commit -m "Corrige login de usuarios antigos e novos"
+            git push
+          fi
