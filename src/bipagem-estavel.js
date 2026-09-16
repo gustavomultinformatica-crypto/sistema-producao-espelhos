@@ -40,18 +40,35 @@ async function usuarioAtual(){
   if(!user)throw new Error('Sessão expirada. Entre novamente no sistema.');
   return user;
 }
+
+async function buscarProduto(codigo){
+  const normalizado=String(codigo||'').trim().toUpperCase();
+  const r=await comRetry(()=>supabase.from('produtos').select('id,modelo,codigo_barras').ilike('codigo_barras',normalizado).limit(2));
+  const lista=r.data||[];
+  return lista.find(p=>String(p.codigo_barras||'').trim().toUpperCase()===normalizado)||null;
+}
+
+async function etapaExiste(produtoId,setorId){
+  const r=await comRetry(()=>supabase.from('bipagens').select('id').eq('produto_id',produtoId).eq('setor_id',setorId).limit(1));
+  return (r.data||[]).length>0;
+}
+
 async function registrarDireto(codigo,modelo,setor,userId){
-  const busca=await comRetry(()=>supabase.from('produtos').select('id,modelo').eq('codigo_barras',codigo).maybeSingle());
-  let produto=busca.data;
+  let produto=await buscarProduto(codigo);
   if(!produto){
     if(setor!==1)throw new Error('Peça nova deve iniciar no setor 1 - Corte e destaque.');
-    const criado=await comRetry(()=>supabase.from('produtos').insert({codigo_barras:codigo,modelo,ativo:true}).select('id,modelo').single());
+    const criado=await comRetry(()=>supabase.from('produtos').insert({codigo_barras:String(codigo).trim().toUpperCase(),modelo,ativo:true}).select('id,modelo,codigo_barras').single());
     produto=criado.data;
   }
-  const hist=await comRetry(()=>supabase.from('bipagens').select('setor_id').eq('produto_id',produto.id).order('setor_id'));
-  const feitos=new Set((hist.data||[]).map(x=>Number(x.setor_id)));
-  if(feitos.has(setor))throw new Error(`Peça já registrada no setor ${setor}.`);
-  if(setor>1&&!feitos.has(setor-1))throw new Error(`Etapa fora de ordem. Primeiro registre no setor ${setor-1}.`);
+
+  // Consulta cada etapa diretamente no banco. Assim a validação não depende
+  // de uma lista de histórico que possa ser limitada/paginada pelo PostgREST.
+  if(await etapaExiste(produto.id,setor))throw new Error(`Peça já registrada no setor ${setor}.`);
+  if(setor>1){
+    const anterior=await etapaExiste(produto.id,setor-1);
+    if(!anterior)throw new Error(`Etapa fora de ordem. Primeiro registre no setor ${setor-1}.`);
+  }
+
   await comRetry(()=>supabase.from('bipagens').insert({produto_id:produto.id,setor_id:setor,usuario_id:userId}));
 }
 
