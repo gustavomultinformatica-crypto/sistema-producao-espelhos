@@ -12,6 +12,9 @@ let adminCache={valor:null,expira:0};
 let timerDebounce=null;
 let periodoForcado=null;
 let periodoPersonalizado=null;
+const cachePeriodos=new Map();
+const CACHE_MS=120000;
+let tokenAtualizacao=0;
 
 function garantirEstilo(){
   if(document.getElementById('adminDashboardStyle'))return;
@@ -42,6 +45,9 @@ function garantirPeriodoPersonalizado(barra){
   });
 }
 async function buscarTodasBipagens(desde,ate=null){
+  const cacheKey=`${desde}|${ate||''}`;
+  const salvo=cachePeriodos.get(cacheKey);
+  if(salvo&&Date.now()-salvo.ts<CACHE_MS)return salvo.data;
   const todas=[];
   for(let from=0;;from+=PAGE_SIZE){
     const to=from+PAGE_SIZE-1;
@@ -50,6 +56,7 @@ async function buscarTodasBipagens(desde,ate=null){
     const lote=data||[];todas.push(...lote);
     if(lote.length<PAGE_SIZE)break;
   }
+  cachePeriodos.set(cacheKey,{ts:Date.now(),data:todas});
   return todas;
 }
 
@@ -64,12 +71,13 @@ function chavePeca(x){return x.produto_id||x.produtos?.codigo_barras||null;}
 
 async function atualizar(){
   if(atualizando||!painelAtivo())return;const barra=document.querySelector('.periodBar');if(!barra)return;
-  atualizando=true;
+  atualizando=true;const meuToken=++tokenAtualizacao;
   try{
     if(!(await ehAdmin())){document.querySelector('.factoryMonitor')?.remove();return;}
     garantirEstilo();garantirPeriodoPersonalizado(barra);const per=periodoAtual(),desde=per.desde||inicio(per.dias).toISOString(),ate=per.ate||new Date().toISOString();
     const [r,{data:perfis,error:erroPerfis}]=await Promise.all([buscarTodasBipagens(desde,ate),supabase.from('perfis').select('usuario_id,nome,setor_id,ativo')]);
     if(erroPerfis)throw erroPerfis;
+    if(meuToken!==tokenAtualizacao)return;
     const porProduto=new Map();for(const x of r){const k=chavePeca(x);if(!k)continue;const item=porProduto.get(k)||{codigo:x.produtos?.codigo_barras||'-',modelo:x.produtos?.modelo||'-',etapas:new Set(),max:0};item.etapas.add(Number(x.setor_id));item.max=Math.max(item.max,Number(x.setor_id)||0);porProduto.set(k,item)}
     const pecas=[...porProduto.values()];
     const totais=setores.map(s=>{const unicos=new Set();for(const x of r){if(Number(x.setor_id)!==s.id)continue;const k=chavePeca(x);if(k)unicos.add(k)}return {...s,total:unicos.size,bipagens:r.filter(x=>Number(x.setor_id)===s.id).length};});
@@ -80,7 +88,7 @@ async function atualizar(){
     root.querySelector('.fmRefresh')?.addEventListener('click',()=>{ultimoPeriodo='';agendarAtualizacao(20)});ultimoPeriodo=per.chave;
   }catch(e){console.error('Monitor de produção:',e)}finally{atualizando=false}
 }
-function agendarAtualizacao(ms=200){clearTimeout(timerDebounce);timerDebounce=setTimeout(async()=>{if(atualizando){agendarAtualizacao(250);return;}await atualizar();},ms)}
+function agendarAtualizacao(ms=0){clearTimeout(timerDebounce);timerDebounce=setTimeout(async()=>{if(atualizando){tokenAtualizacao++;atualizando=false;}await atualizar();},ms)}
 
 // Atualiza explicitamente ao clicar em Hoje, 7 dias ou 30 dias.
 document.addEventListener('click',e=>{
@@ -92,7 +100,10 @@ document.addEventListener('click',e=>{
   // terminar de trocar a classe "active" antes de recalcular o painel.
   periodoForcado=periodoPorTexto(bot.textContent);
   ultimoPeriodo='';
-  agendarAtualizacao(120);
+  // Troca visual imediatamente e dispara a consulta sem atraso perceptível.
+  document.querySelectorAll('.periodBar button').forEach(b=>b.classList.toggle('active',b===bot));
+  const titulo=document.querySelector('.factoryMonitor .fmHead p');if(titulo)titulo.innerHTML=`PERÍODO SELECIONADO: <b>${periodoForcado.label.toUpperCase()}</b> • atualizando...`;
+  agendarAtualizacao(0);
 },true);
 
 function observar(){
