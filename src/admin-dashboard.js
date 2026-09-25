@@ -11,23 +11,41 @@ let ultimoPeriodo='';
 let adminCache={valor:null,expira:0};
 let timerDebounce=null;
 let periodoForcado=null;
+let periodoPersonalizado=null;
 
 function garantirEstilo(){
   if(document.getElementById('adminDashboardStyle'))return;
   const s=document.createElement('style');s.id='adminDashboardStyle';s.textContent=`
-  .factoryMonitor{margin:18px 0;display:grid;gap:14px}.fmHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#0f172a;color:#fff;border-radius:18px;padding:18px 20px}.fmHead h2{margin:0 0 4px;font-size:21px}.fmHead p{margin:0;color:#cbd5e1;font-size:13px}.fmRefresh{border:0;border-radius:10px;background:#fff;color:#0f172a;padding:10px 13px;font-weight:800;cursor:pointer}.fmCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.fmCard,.fmPanel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 5px 20px rgba(15,23,42,.05)}.fmCard small{display:block;color:#64748b;font-weight:700;margin-bottom:6px}.fmCard strong{font-size:29px;color:#0f172a}.fmCard p{margin:4px 0 0;color:#64748b;font-size:12px}.fmGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.fmPanel h3{margin:0 0 3px;font-size:17px;color:#0f172a}.fmSub{font-size:12px;color:#64748b;margin-bottom:13px}.fmSector{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmSector:last-child{border-bottom:0}.fmNum{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#eff6ff;color:#2563eb;font-weight:900;font-size:12px}.fmSector b{display:block;font-size:13px}.fmSector span{font-size:11px;color:#64748b}.fmSector strong{font-size:20px}.fmBar{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:5px}.fmBar i{display:block;height:100%;background:#2563eb;border-radius:99px}.fmListRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmListRow:last-child{border-bottom:0}.fmListRow b{font-size:13px}.fmListRow small{display:block;color:#64748b;margin-top:2px}.fmListRow strong{font-size:18px}.fmWip{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}.fmWip div{background:#f8fafc;border-radius:12px;padding:10px;text-align:center}.fmWip b{display:block;font-size:20px}.fmWip span{font-size:10px;color:#64748b}.fmUpdated{text-align:right;color:#94a3b8;font-size:11px}@media(max-width:900px){.fmCards{grid-template-columns:repeat(2,1fr)}.fmGrid{grid-template-columns:1fr}}@media(max-width:520px){.fmCards{grid-template-columns:1fr 1fr;gap:8px}.fmCard{padding:13px}.fmCard strong{font-size:25px}.fmWip{grid-template-columns:repeat(2,1fr)}}`;
+  .factoryMonitor{margin:18px 0;display:grid;gap:14px}.fmHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#0f172a;color:#fff;border-radius:18px;padding:18px 20px}.fmHead h2{margin:0 0 4px;font-size:21px}.fmHead p{margin:0;color:#cbd5e1;font-size:13px}.fmRefresh{border:0;border-radius:10px;background:#fff;color:#0f172a;padding:10px 13px;font-weight:800;cursor:pointer}.fmCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.fmCard,.fmPanel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 5px 20px rgba(15,23,42,.05)}.fmCard small{display:block;color:#64748b;font-weight:700;margin-bottom:6px}.fmCard strong{font-size:29px;color:#0f172a}.fmCard p{margin:4px 0 0;color:#64748b;font-size:12px}.fmGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.fmPanel h3{margin:0 0 3px;font-size:17px;color:#0f172a}.fmSub{font-size:12px;color:#64748b;margin-bottom:13px}.fmSector{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmSector:last-child{border-bottom:0}.fmNum{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#eff6ff;color:#2563eb;font-weight:900;font-size:12px}.fmSector b{display:block;font-size:13px}.fmSector span{font-size:11px;color:#64748b}.fmSector strong{font-size:20px}.fmBar{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:5px}.fmBar i{display:block;height:100%;background:#2563eb;border-radius:99px}.fmListRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmListRow:last-child{border-bottom:0}.fmListRow b{font-size:13px}.fmListRow small{display:block;color:#64748b;margin-top:2px}.fmListRow strong{font-size:18px}.fmWip{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}.fmWip div{background:#f8fafc;border-radius:12px;padding:10px;text-align:center}.fmWip b{display:block;font-size:20px}.fmWip span{font-size:10px;color:#64748b}.fmUpdated{text-align:right;color:#94a3b8;font-size:11px}.fmCustom{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:10px 0 0;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px}.fmCustom label{display:grid;gap:5px;font-size:12px;font-weight:800;color:#475569}.fmCustom input{padding:9px 10px;border:1px solid #cbd5e1;border-radius:9px;font:inherit}.fmCustom button{padding:10px 14px;border:0;border-radius:9px;background:#2563eb;color:#fff;font-weight:900;cursor:pointer}.fmCustomStatus{font-size:12px;color:#475569}@media(max-width:900px){.fmCards{grid-template-columns:repeat(2,1fr)}.fmGrid{grid-template-columns:1fr}}@media(max-width:520px){.fmCards{grid-template-columns:1fr 1fr;gap:8px}.fmCard{padding:13px}.fmCard strong{font-size:25px}.fmWip{grid-template-columns:repeat(2,1fr)}}`;
   document.head.appendChild(s);
 }
 function periodoPorTexto(txt){txt=String(txt||'').toLowerCase();if(txt.includes('30'))return{chave:'30d',dias:30,label:'30 dias'};if(txt.includes('7'))return{chave:'7d',dias:7,label:'7 dias'};return{chave:'hoje',dias:1,label:'Hoje'};}
-function periodoAtual(){if(periodoForcado)return periodoForcado;const ativo=[...document.querySelectorAll('.periodBar button.active')][0];return periodoPorTexto(ativo?.textContent||'Hoje');}
+function periodoAtual(){if(periodoPersonalizado)return periodoPersonalizado;if(periodoForcado)return periodoForcado;const ativo=[...document.querySelectorAll('.periodBar button.active')][0];return periodoPorTexto(ativo?.textContent||'Hoje');}
 function inicio(dias){const d=new Date();d.setHours(0,0,0,0);if(dias>1)d.setDate(d.getDate()-(dias-1));return d}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]))}
 
-async function buscarTodasBipagens(desde){
+function diasInclusivos(a,b){const x=new Date(a);x.setHours(0,0,0,0);const y=new Date(b);y.setHours(0,0,0,0);return Math.max(1,Math.round((y-x)/86400000)+1)}
+function garantirPeriodoPersonalizado(barra){
+  if(document.getElementById('fmCustomPeriod'))return;
+  const box=document.createElement('div');box.id='fmCustomPeriod';box.className='fmCustom';
+  const hoje=new Date(),ini=new Date();ini.setDate(hoje.getDate()-29);
+  const iso=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),dia=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${dia}`};
+  box.innerHTML=`<label>Data inicial<input id="fmDataIni" type="date" value="${iso(ini)}"></label><label>Data final<input id="fmDataFim" type="date" value="${iso(hoje)}"></label><button id="fmAplicarPeriodo" type="button">APLICAR PERÍODO</button><span class="fmCustomStatus">Escolha qualquer intervalo de datas.</span>`;
+  barra.insertAdjacentElement('afterend',box);
+  box.querySelector('#fmAplicarPeriodo').addEventListener('click',()=>{
+    const a=box.querySelector('#fmDataIni').value,b=box.querySelector('#fmDataFim').value;
+    if(!a||!b)return;
+    const de=new Date(a+'T00:00:00'),ate=new Date(b+'T23:59:59.999');
+    if(de>ate){box.querySelector('.fmCustomStatus').textContent='A data inicial deve ser anterior à data final.';return;}
+    periodoPersonalizado={chave:`custom-${a}-${b}`,dias:diasInclusivos(de,ate),label:`${de.toLocaleDateString('pt-BR')} até ${ate.toLocaleDateString('pt-BR')}`,desde:de.toISOString(),ate:ate.toISOString()};
+    periodoForcado=null;ultimoPeriodo='';box.querySelector('.fmCustomStatus').textContent='Período personalizado aplicado.';agendarAtualizacao(20);
+  });
+}
+async function buscarTodasBipagens(desde,ate=null){
   const todas=[];
   for(let from=0;;from+=PAGE_SIZE){
     const to=from+PAGE_SIZE-1;
-    const {data,error}=await supabase.from('bipagens').select('id,criado_em,setor_id,usuario_id,produto_id,produtos(codigo_barras,modelo)').gte('criado_em',desde).order('criado_em',{ascending:false}).range(from,to);
+    const {data,error}=await supabase.from('bipagens').select('id,criado_em,setor_id,usuario_id,produto_id,produtos(codigo_barras,modelo)').gte('criado_em',desde).lte('criado_em',ate||new Date().toISOString()).order('criado_em',{ascending:false}).range(from,to);
     if(error)throw error;
     const lote=data||[];todas.push(...lote);
     if(lote.length<PAGE_SIZE)break;
@@ -49,8 +67,8 @@ async function atualizar(){
   atualizando=true;
   try{
     if(!(await ehAdmin())){document.querySelector('.factoryMonitor')?.remove();return;}
-    garantirEstilo();const per=periodoAtual(),desde=inicio(per.dias).toISOString();
-    const [r,{data:perfis,error:erroPerfis}]=await Promise.all([buscarTodasBipagens(desde),supabase.from('perfis').select('usuario_id,nome,setor_id,ativo')]);
+    garantirEstilo();garantirPeriodoPersonalizado(barra);const per=periodoAtual(),desde=per.desde||inicio(per.dias).toISOString(),ate=per.ate||new Date().toISOString();
+    const [r,{data:perfis,error:erroPerfis}]=await Promise.all([buscarTodasBipagens(desde,ate),supabase.from('perfis').select('usuario_id,nome,setor_id,ativo')]);
     if(erroPerfis)throw erroPerfis;
     const porProduto=new Map();for(const x of r){const k=chavePeca(x);if(!k)continue;const item=porProduto.get(k)||{codigo:x.produtos?.codigo_barras||'-',modelo:x.produtos?.modelo||'-',etapas:new Set(),max:0};item.etapas.add(Number(x.setor_id));item.max=Math.max(item.max,Number(x.setor_id)||0);porProduto.set(k,item)}
     const pecas=[...porProduto.values()];
@@ -68,6 +86,8 @@ function agendarAtualizacao(ms=200){clearTimeout(timerDebounce);timerDebounce=se
 document.addEventListener('click',e=>{
   const bot=e.target?.closest?.('.periodBar button');
   if(!bot)return;
+  periodoPersonalizado=null;
+  const st=document.querySelector('.fmCustomStatus');if(st)st.textContent='Escolha qualquer intervalo de datas.';
   // No clique, usa diretamente o botão escolhido. Não depende do React
   // terminar de trocar a classe "active" antes de recalcular o painel.
   periodoForcado=periodoPorTexto(bot.textContent);
