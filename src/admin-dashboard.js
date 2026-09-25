@@ -10,6 +10,7 @@ let atualizando=false;
 let ultimoPeriodo='';
 let adminCache={valor:null,expira:0};
 let timerDebounce=null;
+let periodoForcado=null;
 
 function garantirEstilo(){
   if(document.getElementById('adminDashboardStyle'))return;
@@ -17,7 +18,8 @@ function garantirEstilo(){
   .factoryMonitor{margin:18px 0;display:grid;gap:14px}.fmHead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;background:#0f172a;color:#fff;border-radius:18px;padding:18px 20px}.fmHead h2{margin:0 0 4px;font-size:21px}.fmHead p{margin:0;color:#cbd5e1;font-size:13px}.fmRefresh{border:0;border-radius:10px;background:#fff;color:#0f172a;padding:10px 13px;font-weight:800;cursor:pointer}.fmCards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.fmCard,.fmPanel{background:#fff;border:1px solid #e2e8f0;border-radius:16px;padding:16px;box-shadow:0 5px 20px rgba(15,23,42,.05)}.fmCard small{display:block;color:#64748b;font-weight:700;margin-bottom:6px}.fmCard strong{font-size:29px;color:#0f172a}.fmCard p{margin:4px 0 0;color:#64748b;font-size:12px}.fmGrid{display:grid;grid-template-columns:1.15fr .85fr;gap:14px}.fmPanel h3{margin:0 0 3px;font-size:17px;color:#0f172a}.fmSub{font-size:12px;color:#64748b;margin-bottom:13px}.fmSector{display:grid;grid-template-columns:28px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmSector:last-child{border-bottom:0}.fmNum{width:28px;height:28px;display:grid;place-items:center;border-radius:9px;background:#eff6ff;color:#2563eb;font-weight:900;font-size:12px}.fmSector b{display:block;font-size:13px}.fmSector span{font-size:11px;color:#64748b}.fmSector strong{font-size:20px}.fmBar{height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:5px}.fmBar i{display:block;height:100%;background:#2563eb;border-radius:99px}.fmListRow{display:grid;grid-template-columns:1fr auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid #f1f5f9}.fmListRow:last-child{border-bottom:0}.fmListRow b{font-size:13px}.fmListRow small{display:block;color:#64748b;margin-top:2px}.fmListRow strong{font-size:18px}.fmWip{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:10px}.fmWip div{background:#f8fafc;border-radius:12px;padding:10px;text-align:center}.fmWip b{display:block;font-size:20px}.fmWip span{font-size:10px;color:#64748b}.fmUpdated{text-align:right;color:#94a3b8;font-size:11px}@media(max-width:900px){.fmCards{grid-template-columns:repeat(2,1fr)}.fmGrid{grid-template-columns:1fr}}@media(max-width:520px){.fmCards{grid-template-columns:1fr 1fr;gap:8px}.fmCard{padding:13px}.fmCard strong{font-size:25px}.fmWip{grid-template-columns:repeat(2,1fr)}}`;
   document.head.appendChild(s);
 }
-function periodoAtual(){const ativo=[...document.querySelectorAll('.periodBar button.active')][0];const txt=(ativo?.textContent||'Hoje').toLowerCase();if(txt.includes('30'))return{chave:'30d',dias:30,label:'30 dias'};if(txt.includes('7'))return{chave:'7d',dias:7,label:'7 dias'};return{chave:'hoje',dias:1,label:'Hoje'};}
+function periodoPorTexto(txt){txt=String(txt||'').toLowerCase();if(txt.includes('30'))return{chave:'30d',dias:30,label:'30 dias'};if(txt.includes('7'))return{chave:'7d',dias:7,label:'7 dias'};return{chave:'hoje',dias:1,label:'Hoje'};}
+function periodoAtual(){if(periodoForcado)return periodoForcado;const ativo=[...document.querySelectorAll('.periodBar button.active')][0];return periodoPorTexto(ativo?.textContent||'Hoje');}
 function inicio(dias){const d=new Date();d.setHours(0,0,0,0);if(dias>1)d.setDate(d.getDate()-(dias-1));return d}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#039;'}[c]))}
 
@@ -60,20 +62,25 @@ async function atualizar(){
     root.querySelector('.fmRefresh')?.addEventListener('click',()=>{ultimoPeriodo='';agendarAtualizacao(20)});ultimoPeriodo=per.chave;
   }catch(e){console.error('Monitor de produção:',e)}finally{atualizando=false}
 }
-function agendarAtualizacao(ms=200){clearTimeout(timerDebounce);timerDebounce=setTimeout(()=>atualizar(),ms)}
+function agendarAtualizacao(ms=200){clearTimeout(timerDebounce);timerDebounce=setTimeout(async()=>{if(atualizando){agendarAtualizacao(250);return;}await atualizar();},ms)}
 
 // Atualiza explicitamente ao clicar em Hoje, 7 dias ou 30 dias.
 document.addEventListener('click',e=>{
   const bot=e.target?.closest?.('.periodBar button');
   if(!bot)return;
+  // No clique, usa diretamente o botão escolhido. Não depende do React
+  // terminar de trocar a classe "active" antes de recalcular o painel.
+  periodoForcado=periodoPorTexto(bot.textContent);
   ultimoPeriodo='';
-  agendarAtualizacao(80);
+  agendarAtualizacao(120);
 },true);
 
 function observar(){
   const obs=new MutationObserver(()=>{
-    const per=periodoAtual().chave;
-    if(per!==ultimoPeriodo)agendarAtualizacao(80);
+    const ativo=[...document.querySelectorAll('.periodBar button.active')][0];
+    const per=periodoPorTexto(ativo?.textContent||'Hoje');
+    if(!periodoForcado||per.chave===periodoForcado.chave)periodoForcado=per;
+    if(per.chave!==ultimoPeriodo)agendarAtualizacao(80);
   });
   obs.observe(document.documentElement,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['class']});
 }
