@@ -59,7 +59,7 @@ function render(){
  const nome=user==='todos'?'Todos os funcionários':nomeUsuario(user),periodo=de===ate?dataBR(de):`${dataBR(de)} até ${dataBR(ate)}`;
  o.querySelector('[data-rf-applied]').textContent=`Filtro aplicado: ${nome} • ${periodo} • ${hDe} às ${hAte}`;o.querySelector('[data-rf-badge]').textContent=`${dados.length.toLocaleString('pt-BR')} bipagens`;
  const tbody=o.querySelector('[data-rf-list]');if(!dados.length){tbody.innerHTML='<div class="rfEmpty">Nenhuma bipagem encontrada exatamente na data e horário selecionados.</div>';return}
- tbody.innerHTML=dados.slice(0,3000).map(r=>`<div class="rfRow"><b>${esc(r.codigo)}</b><span>${esc(r.modelo)}</span><span>${esc(SETORES[r.setorId]||'-')}</span><span>${esc(nomeUsuario(r.usuarioId))}</span><time>${esc(fmtData(r.criadoEm))}</time></div>`).join('')+(dados.length>3000?`<div class="rfEmpty">Mostrando 3.000 linhas na tela de ${dados.length.toLocaleString('pt-BR')} bipagens contabilizadas.</div>`:'');
+ tbody.innerHTML=dados.map(r=>`<div class="rfRow"><b>${esc(r.codigo)}</b><span>${esc(r.modelo)}</span><span>${esc(SETORES[r.setorId]||'-')}</span><span>${esc(nomeUsuario(r.usuarioId))}</span><time>${esc(fmtData(r.criadoEm))}</time></div>`).join('');
 }
 
 async function aplicar(){
