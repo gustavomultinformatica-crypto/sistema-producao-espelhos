@@ -1,0 +1,26 @@
+name: Validar fase 1 sem deploy
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [feature/programacao-fase1-sem-bipagem]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Verificar ausência de mudanças na bipagem
+        run: |
+          git fetch origin main --depth=1
+          if git diff --name-only origin/main...HEAD | grep -E '^(src/bipagem-estavel\.js|src/supabase\.js|supabase/schema\.sql)$'; then
+            echo 'ERRO: arquivos críticos da produção alterados'; exit 1
+          fi
+          echo 'Arquivos críticos preservados.'
