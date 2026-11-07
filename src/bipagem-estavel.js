@@ -53,7 +53,15 @@ async function etapaExiste(produtoId,setorId){
   return (r.data||[]).length>0;
 }
 
-async function registrarDireto(codigo,modelo,setor,userId){
+async function registrarDireto(codigo,modelo,setor,userId,pedidoId){
+  // Na branch de homologação, toda bipagem passa pela transação no banco.
+  // Nenhuma escrita direta em produtos/bipagens ocorre neste caminho.
+  const r=await comRetry(()=>supabase.rpc('registrar_bipagem_programada',{p_codigo:String(codigo).trim(),p_modelo:modelo,p_setor:setor,p_item_programacao:pedidoId||null}));
+  return r.data;
+}
+
+/* Fluxo anterior preservado para referência, NÃO invocado na homologação.
+async function registrarDiretoLegado(codigo,modelo,setor,userId){
   let produto=await buscarProduto(codigo);
   if(!produto){
     if(setor!==1)throw new Error('Peça nova deve iniciar no setor 1 - Corte e destaque.');
@@ -72,12 +80,14 @@ async function registrarDireto(codigo,modelo,setor,userId){
   await comRetry(()=>supabase.from('bipagens').insert({produto_id:produto.id,setor_id:setor,usuario_id:userId}));
 }
 
+*/
 function enfileirar(s,codigo){
   codigo=(codigo||'').trim();if(!codigo)return;
   const agora=Date.now();if(codigo===ultimoCodigo&&agora-ultimoEnvio<700)return;
   ultimoCodigo=codigo;ultimoEnvio=agora;
   const setor=Number(selectNome(s,'setor')?.value||0),modelo=selectNome(s,'modelo')?.value||'';
-  fila.push({s,codigo,setor,modelo});
+  const pedidoId=selectNome(s,'pedido')?.value||null;
+  fila.push({s,codigo,setor,modelo,pedidoId});
   const inp=inputCodigo(s);if(inp){setValor(inp,'');inp.focus();}
   mensagem(s,fila.length>1?`Peça ${codigo} adicionada à fila. ${fila.length} aguardando.`:`Peça ${codigo} lida. Registrando...`);
   processarFila();
@@ -92,12 +102,12 @@ async function processarFila(){
     processando=false;processarFila();return;
   }
   while(fila.length){
-    const item=fila.shift();const {s,codigo,setor,modelo}=item;
+    const item=fila.shift();const {s,codigo,setor,modelo,pedidoId}=item;
     const bot=[...s.querySelectorAll('button')].find(b=>/REGISTRAR PEÇA|REGISTRANDO/i.test(b.textContent||''));
     const textoOriginal=bot?.textContent||'REGISTRAR PEÇA';if(bot){bot.disabled=true;bot.textContent='REGISTRANDO...'}
     mensagem(s,`Registrando ${codigo}...${fila.length?` (${fila.length} na fila)`:''}`);
     try{
-      await registrarDireto(codigo,modelo,setor,userId);
+      await registrarDireto(codigo,modelo,setor,userId,pedidoId);
       mensagem(s,`✓ Peça ${codigo} registrada. Pode bipar a próxima${fila.length?` — ${fila.length} aguardando`:''}.`,'sucesso');
       s.querySelector('.leitorFisicoMsg')?.remove();s.querySelector('.scannerEnhanceMsg')?.remove();
       window.dispatchEvent(new CustomEvent('bipagemRapidaConcluida',{detail:{codigo,setor,modelo}}));if(navigator.vibrate)navigator.vibrate(50);
