@@ -66,32 +66,50 @@ function render(totais){
   o.querySelector('[data-meta-emb]').textContent=metaDoSetor(6);
   o.querySelector('[data-emb]').textContent=emb;
   o.querySelector('[data-emb-pct]').textContent=`${pct(emb,6)}% da meta`;
-  o.querySelector('[data-bips]').textContent=totais.reduce((a,b)=>a+b.total,0);
+  o.querySelector('[data-bips]').textContent=totais.reduce((a,b)=>a+(b.bipagens??b.total),0);
   o.querySelector('[data-update]').textContent=`Última atualização: ${new Date().toLocaleTimeString('pt-BR')}`;
 }
 
+async function buscarBipagensHoje(){
+  const desde=inicioHoje(), ate=new Date().toISOString(), todas=[];
+  const tamanho=500;
+  for(let offset=0;;offset+=tamanho){
+    const {data,error}=await supabase.from('bipagens')
+      .select('id,setor_id,criado_em,produto_id,produtos(codigo_barras)')
+      .gte('criado_em',desde).lte('criado_em',ate)
+      .order('criado_em',{ascending:false}).order('id',{ascending:false})
+      .range(offset,offset+tamanho-1);
+    if(error) throw error;
+    const lote=data||[]; todas.push(...lote);
+    if(lote.length<tamanho) return todas;
+  }
+}
+let carregandoTV=false;
 async function carregar(){
   const o=document.querySelector('.tv2Overlay'); if(!o) return;
   const erro=o.querySelector('[data-error]');
+  if(carregandoTV) return;
+  carregandoTV=true;
   try{
     if(!supabaseConfigured) throw new Error('Supabase não configurado');
     const [mRes,bRes]=await Promise.all([
       supabase.from('metas_setores').select('setor_id,meta_diaria'),
-      supabase.from('bipagens').select('setor_id,criado_em').gte('criado_em',inicioHoje())
+      buscarBipagensHoje()
     ]);
     if(mRes.error) throw mRes.error;
     if(Array.isArray(mRes.data)) for(const x of mRes.data) metas[Number(x.setor_id)]=Number(x.meta_diaria??META_PADRAO);
-    if(bRes.error) throw bRes.error;
-    const totais=SETORES.map(s=>({...s,total:(bRes.data||[]).filter(r=>Number(r.setor_id)===s.id).length}));
+    const totais=SETORES.map(s=>{
+      const registros=bRes.filter(r=>Number(r.setor_id)===s.id);
+      const unicos=new Set(registros.map(r=>r.produto_id||r.produtos?.codigo_barras||null).filter(Boolean));
+      return {...s,total:unicos.size,bipagens:registros.length};
+    });
     erro.hidden=true;
     render(totais);
   }catch(e){
-    const totais=SETORES.map(s=>({...s,total:0}));
-    render(totais);
     erro.hidden=false;
     erro.textContent='Não foi possível buscar os dados agora. O painel continuará tentando atualizar automaticamente.';
     console.error('Painel TV:',e);
-  }
+  }finally{carregandoTV=false;}
 }
 
 function criarPainel(){
