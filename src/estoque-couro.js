@@ -82,8 +82,26 @@ async function registrar(e){
 async function abrir(){
  estilos();document.querySelector('.ecOverlay')?.remove();editandoId=null;const hoje=new Date(),data=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}-${String(hoje.getDate()).padStart(2,'0')}`;const o=document.createElement('section');o.className='ecOverlay';o.innerHTML=`<div class="ecShell"><div class="ecTop"><div><small>CONTROLE DE ESTOQUE</small><h1>Estoque de couro</h1><p>Registre a metragem recebida por cor e acompanhe o saldo de cada couro.</p></div><button type="button" class="ecBack">← Voltar</button></div><div class="ecGrid"><div class="ecPanel"><h2>Nova movimentação</h2><div class="ecSub">Para chegada do fornecedor, deixe o tipo como Entrada. Use Saída quando quiser registrar consumo.</div><div class="ecEditing" data-ec-editing></div><form class="ecForm" data-ec-form><label>Tipo<select data-ec-tipo><option value="ENTRADA">Entrada / recebimento</option><option value="SAIDA">Saída / consumo</option></select></label><label>Data<input type="date" data-ec-data value="${data}"></label><label>Cor<input list="ec-cores" data-ec-cor placeholder="Ex.: Preto"><datalist id="ec-cores">${CORES_PADRAO.map(c=>`<option value="${c}">`).join('')}</datalist></label><label>Quantidade em metros<input type="number" step="0.01" min="0.01" data-ec-qtd placeholder="Ex.: 60"></label><label>Fornecedor<input data-ec-fornecedor placeholder="Nome do fornecedor"></label><label>Nota / documento<input data-ec-doc placeholder="Ex.: NF 12345"></label><label class="ecFull">Observação<textarea data-ec-obs placeholder="Ex.: lote com tonalidade diferente, bobina 3..."></textarea></label><button class="ecSubmit" data-ec-submit>SALVAR MOVIMENTAÇÃO</button><button type="button" class="ecCancel" data-ec-cancel>CANCELAR ALTERAÇÃO</button></form><div data-ec-msg></div></div><div class="ecPanel"><div class="ecCards"><div class="ecCard"><span>Estoque atual</span><strong data-ec-total>0 m</strong></div><div class="ecCard"><span>Total recebido</span><strong data-ec-entradas>0 m</strong></div><div class="ecCard"><span>Total consumido</span><strong data-ec-saidas>0 m</strong></div></div><h2>Saldo por cor</h2><div class="ecSub">Preto, Café, Caramelo, Gelo, Rosa e qualquer nova cor cadastrada.</div><div class="ecStockGrid" data-ec-stock><div class="ecEmpty">Carregando...</div></div></div></div><div class="ecPanel"><h2>Histórico de movimentações</h2><div class="ecSub">Use ALTERAR para corrigir um lançamento ou EXCLUIR para remover uma movimentação errada.</div><div class="ecFilters"><select data-ec-filter-cor><option value="todas">Todas as cores</option></select><select data-ec-filter-tipo><option value="todos">Entradas e saídas</option><option value="ENTRADA">Somente entradas</option><option value="SAIDA">Somente saídas</option></select></div><div class="ecList" data-ec-list><div class="ecEmpty">Carregando...</div></div></div></div>`;document.body.appendChild(o);o.querySelector('.ecBack').onclick=()=>o.remove();o.querySelector('[data-ec-form]').addEventListener('submit',registrar);o.querySelector('[data-ec-cancel]').addEventListener('click',()=>{limparFormulario();const msg=o.querySelector('[data-ec-msg]');msg.className='';msg.textContent=''});o.querySelector('[data-ec-filter-cor]').addEventListener('change',render);o.querySelector('[data-ec-filter-tipo]').addEventListener('change',render);try{await carregar()}catch(err){o.querySelector('[data-ec-list]').innerHTML=`<div class="ecEmpty">Não foi possível carregar o estoque: ${esc(err.message||'erro')}</div>`}}
 
+let instalandoEstoque=false;
+function limparBotoesEstoque(nav){
+ const botoes=[...nav.querySelectorAll('[data-ec-button]')];
+ botoes.slice(1).forEach(b=>b.remove());
+ return botoes[0]||null;
+}
 async function instalar(){
- const nav=document.querySelector('.appNav');if(!nav||nav.querySelector('[data-ec-button]'))return;const{data:{session}}=await supabase.auth.getSession();if(!session)return;const{data}=await supabase.from('perfis').select('papel').eq('usuario_id',session.user.id).maybeSingle();if(data?.papel!=='admin')return;const b=document.createElement('button');b.type='button';b.className='ecNav';b.dataset.ecButton='true';b.innerHTML='<span aria-hidden="true">🧵</span> Estoque de couro';b.onclick=abrir;nav.appendChild(b);
+ const nav=document.querySelector('.appNav');
+ if(!nav||limparBotoesEstoque(nav)||instalandoEstoque)return;
+ instalandoEstoque=true;
+ try{
+  const{data:{session}}=await supabase.auth.getSession();if(!session)return;
+  const{data,error}=await supabase.from('perfis').select('papel').eq('usuario_id',session.user.id).maybeSingle();
+  if(error||data?.papel!=='admin')return;
+  const{data:{session:atual}}=await supabase.auth.getSession();
+  if(atual?.user.id!==session.user.id)return;
+  const menu=document.querySelector('.appNav');
+  if(!menu||limparBotoesEstoque(menu))return;
+  const b=document.createElement('button');b.type='button';b.className='ecNav';b.dataset.ecButton='true';b.innerHTML='<span aria-hidden="true">🧵</span> Estoque de couro';b.onclick=abrir;menu.appendChild(b);
+ }catch(err){console.error('Menu estoque de couro:',err)}finally{instalandoEstoque=false;}
 }
 
 estilos();setTimeout(instalar,600);new MutationObserver(()=>setTimeout(instalar,120)).observe(document.body,{childList:true,subtree:true});
